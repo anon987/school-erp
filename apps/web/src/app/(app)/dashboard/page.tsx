@@ -1,5 +1,5 @@
 import { StatusBadge } from "@schoolerp/ui";
-import { requireSession } from "@/lib/auth/requireSession";
+import { requireSession } from "@/lib/core/auth/requireSession";
 
 export default async function DashboardPage() {
   const session = await requireSession();

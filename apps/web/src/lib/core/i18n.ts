@@ -7,6 +7,7 @@
  */
 const dictionary = {
   "nav.dashboard": "Dashboard",
+  "nav.group.settings": "Settings",
   "nav.school_profile": "School Profile",
   "nav.branding": "Branding",
   "nav.members": "Members & Roles",

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Sans_Devanagari } from "next/font/google";
-import { resolveServerTheme } from "@/lib/theme/resolveTheme";
-import { THEME_PREFERENCE_COOKIE, THEME_RESOLVED_COOKIE } from "@/lib/theme/constants";
+import { resolveServerTheme } from "@/lib/core/theme/resolveTheme";
+import { THEME_PREFERENCE_COOKIE, THEME_RESOLVED_COOKIE } from "@/lib/core/theme/constants";
 import "./globals.css";
 
 export const metadata: Metadata = {

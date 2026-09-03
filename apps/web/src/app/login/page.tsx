@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth/session";
-import { t } from "@/lib/i18n";
+import { getSession } from "@/lib/core/auth/session";
+import { t } from "@/lib/core/i18n";
 import { LoginForm } from "./LoginForm";
 
 export default async function LoginPage() {

@@ -1,4 +1,4 @@
-import { RequirePermission } from "@/lib/auth/RequirePermission";
+import { RequirePermission } from "@/lib/core/auth/RequirePermission";
 
 export default function SchoolProfilePage() {
   return (

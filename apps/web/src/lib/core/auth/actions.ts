@@ -4,9 +4,9 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { emailPasswordStrategy } from "@schoolerp/integrations";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { t } from "@/lib/i18n";
-import { THEME_PREFERENCE_COOKIE, isThemePreference } from "@/lib/theme/constants";
+import { createSupabaseServerClient } from "@/lib/core/supabase/server";
+import { t } from "@/lib/core/i18n";
+import { THEME_PREFERENCE_COOKIE, isThemePreference } from "@/lib/core/theme/constants";
 
 // TODO(types): replace with the generated Row type for user_profile once
 // packages/types/src/database.ts is regenerated. See that file's header.

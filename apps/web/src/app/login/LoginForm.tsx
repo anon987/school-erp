@@ -1,8 +1,8 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { signInAction, type SignInState } from "./actions";
-import { t } from "@/lib/i18n";
+import { signInAction, type SignInState } from "@/lib/core/auth/actions";
+import { t } from "@/lib/core/i18n";
 
 const initialState: SignInState = {};
 
