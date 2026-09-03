@@ -26,7 +26,11 @@ apps/
 packages/
   db/             Supabase migrations, RLS policies, seed data
   types/          DB types (generated — see packages/db's gen-types script)
-  ui/             Shared components
+  ui/             React components + design tokens for web surfaces only (apps/web, and any
+                   future Next.js surface) -- NOT consumable by apps/mobile. React Native can't
+                   render React DOM components; only the token *values* and pure derivation
+                   logic (packages/ui/src/theme) are portable there, and only by porting the
+                   values, not importing the package.
   integrations/   Provider adapters (auth is the only one built in P0 — payments/messaging/
                    gps/biometric are added when their feature phase starts)
 ```

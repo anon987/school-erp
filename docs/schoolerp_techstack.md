@@ -57,6 +57,14 @@ create policy school_isolation on students
 
 `campus_id` exists from day one under `school_id`, even though the pilot has one branch. Single-branch schools get a default campus that the UI hides. Adding this later would mean a migration across every table.
 
+### 2.4 Staff/admin surface vs. parent/student portal are separate route boundaries
+
+Both live in the same Next.js app (`apps/web`, per §4 — one deployable, not two), but they are **not** the same route group and the portal is never nested inside the staff/admin shell.
+
+**Why:** the permission shape is fundamentally different, not just the nav. Every staff-facing role (owner, admin, accountant, teacher, ...) is scoped by `school_id` via the isolation layer (§2.1–§2.2) — a teacher can see many students, gated by role/permission. A parent or student is scoped by an *individual relationship* on top of that — `student_guardian` for a parent, self for a student — verified server-side on every request (CLAUDE.md: "Parent access must verify the `student_guardian` link server-side on every request, not filter client-side"). Folding the portal into the same `(app)` route group and layout would make it easy to accidentally reuse a permission check built for "any staff member with `school.manage_students`" in a context that actually requires "only this specific parent's own children" — a real cross-account data exposure risk, not a cosmetic one.
+
+**Concretely:** the staff/admin shell is the `(app)` route group (role-aware nav, built in P0). The parent/student portal (`docs/schoolerp_features.md` §L, `P2`) gets its own top-level route group — `(portal)` — as a sibling to `(app)`, with its own layout, its own nav, and its own server-side authorization helpers that check the guardian/self relationship, not school-level role permissions. Nothing to build yet; this just fixes where it goes when P2 starts, so it isn't nested under `(app)` by default.
+
 ---
 
 ## 3. Data model — core entities
@@ -111,7 +119,9 @@ schoolerp/
 ├── packages/
 │   ├── db/                     # Supabase migrations, RLS policies, seed data
 │   ├── types/                  # Shared TypeScript types generated from DB schema
-│   ├── ui/                     # Shared components
+│   ├── ui/                     # Web-only components + design tokens (apps/web). Not consumable
+│   │                            # by apps/mobile (React Native) -- only token values and pure
+│   │                            # derivation logic are portable there, not the components.
 │   └── integrations/           # Provider adapters (payments, sms, whatsapp, gps, biometric)
 ├── docs/
 │   ├── schoolerp_features.md
