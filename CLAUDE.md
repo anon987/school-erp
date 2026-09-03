@@ -92,6 +92,46 @@ integrations/
 
 Schools arrive with vendors already chosen. A school with an existing GPS contract or biometric device must be servable without forking the code.
 
+### apps/web code organization
+
+Feature-based, not layer-based — a layer folder (`lib/queries`, `lib/actions`) becomes an unsorted dumping ground the moment more than two or three modules exist, and this product has 18.
+
+```
+apps/web/src/
+├── lib/
+│   ├── core/              # shared infra — never feature-specific
+│   │   ├── supabase/      # server.ts, browser.ts, middleware.ts, env.ts
+│   │   ├── auth/          # session.ts, permissions.ts, requireSession.ts, actions.ts
+│   │   ├── theme/         # per-school branding + per-user dark mode
+│   │   ├── import/        # the import framework — shared by Students AND Staff
+│   │   ├── i18n.ts
+│   │   ├── nav.ts         # grouped nav model — see below
+│   │   └── validation.ts  # shared zod primitives: E.164 phone, Indian date, money-as-paise
+│   ├── students/
+│   │   ├── types.ts       # domain types — see "Domain types vs generated types" below
+│   │   ├── schemas.ts     # zod: this feature's inputs
+│   │   ├── queries.ts     # server-side reads
+│   │   ├── actions.ts     # "use server" mutations
+│   │   └── components/    # feature-only components, no reuse case yet
+│   └── staff/ fees/ attendance/ ...   # same shape, one folder per module
+├── components/             # cross-feature app components (DataTable, FilterBar) —
+│                           # more than one module needs them, not generic enough for packages/ui
+└── app/                    # pages/layouts ONLY — no logic lives here
+```
+
+**`src/app/**` stays thin.** Every action, query, and schema lives in `src/lib/`, never colocated in a route folder — even a route-exclusive one. One rule to hold across 18 modules beats "lib, except this file."
+
+**Domain types vs. generated types.** `packages/types/database.ts` is generated from the schema (`pnpm --filter @schoolerp/db gen-types`) and never hand-edited, never consumed directly by a component. Each feature's `types.ts` defines the shapes its own queries actually return — derived from the generated `Row` type, or hand-shaped for a joined query (`StudentWithEnrollment`). This is the one layer allowed to change when a query's select-list changes.
+
+**Component tiers** — pick the narrowest one that fits:
+1. `packages/ui` — design-system primitives (`StatusBadge`, `cn`, theme derivation). Web-only: the mobile app is React Native and cannot consume React DOM components — only `packages/ui`'s token *values* and pure derivation logic are portable there, never the components themselves.
+2. `src/components/` — cross-feature app components, no design-system generality required.
+3. `src/lib/<feature>/components/` — one module's own components.
+
+**Route groups under `(app)`** match the module list in `docs/schoolerp_features.md` §2, not an arbitrary split: `people/` (Students, Admissions, Staff & HR), `academics/` (Attendance, Exams, Timetable, Homework), `finance/` (Fees, Accounts, Payroll), `operations/` (Transport, Library, Hostel, Inventory), `communication/`, and `settings/` (School Setup, Appearance, Audit/Security — already built in P0). Dashboard stays ungrouped at `/dashboard`. Reports (§T) are **not** their own group — every P1 baseline report belongs to an existing domain (fee reports under `finance/`, attendance reports under `academics/`, ...); only P4's cross-module analytics would ever justify a standalone group. The parent/student portal is a separate top-level route group (`(portal)`), never nested under `(app)` — see `docs/schoolerp_techstack.md` §2.4 for why the permission shape makes that a correctness issue, not a style choice.
+
+**Nav visibility is always derived, never a second permission implementation.** `lib/core/nav.ts` declares routes and the permission key each one needs — zero role/permission logic of its own. A nav group is visible if at least one of its items survives filtering against the caller's permission set from `fn_role_permissions`/`fn_has_permission` (the same functions RLS policies call). Never give a nav group its own separately-declared list of allowed roles — that is exactly how "what the nav shows" and "what the database allows" drift apart.
+
 ### Theming
 
 Two layers: per-school branding (runtime, from the school record) and per-user dark mode (light/dark/system, stored against the user). See `docs/schoolerp_techstack.md` §7a.
