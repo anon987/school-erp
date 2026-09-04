@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 import type { StudentDetail, StudentFormOptions } from "../types";
 import { createStudentAction, updateStudentAction, type StudentFormState } from "../actions";
@@ -12,7 +13,7 @@ function SubmitButton({ label }: { label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+      className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
     >
       {label}
     </button>
@@ -20,15 +21,31 @@ function SubmitButton({ label }: { label: string }) {
 }
 
 const inputClass = "rounded-md border border-input bg-background px-3 py-2 text-base";
-const labelClass = "text-sm font-medium";
+const labelClass = "text-xs font-medium text-muted-foreground";
 const fieldClass = "flex flex-col gap-1";
+
+/** docs/design-system.md > Forms: mark the minority. Most fields here are required; append this to the few that aren't. */
+function Optional() {
+  return <span className="font-normal normal-case text-muted-foreground"> (optional)</span>;
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-4 rounded-md border border-border bg-card p-4 shadow-sm">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      {children}
+    </section>
+  );
+}
 
 export function StudentForm({
   options,
   student,
+  cancelHref,
 }: {
   options: StudentFormOptions;
   student?: StudentDetail;
+  cancelHref: string;
 }) {
   const action = student ? updateStudentAction : createStudentAction;
   const [state, formAction] = useFormState(action, initialState);
@@ -39,25 +56,26 @@ export function StudentForm({
     <form action={formAction} noValidate className="flex max-w-2xl flex-col gap-6">
       {student ? <input type="hidden" name="id" value={student.id} /> : null}
 
-      <fieldset className="flex flex-col gap-4">
-        <legend className="text-sm font-semibold">Student</legend>
+      <Section title="Basic details">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className={fieldClass}>
             <label htmlFor="admissionNumber" className={labelClass}>
               Admission number
+              <Optional />
             </label>
             <input
               id="admissionNumber"
               name="admissionNumber"
               defaultValue={student?.admissionNumber}
               disabled={Boolean(student)}
-              placeholder="Leave blank to auto-generate"
               className={inputClass}
             />
+            <p className="text-xs text-muted-foreground">Leave blank to auto-generate.</p>
           </div>
           <div className={fieldClass}>
             <label htmlFor="rollNumber" className={labelClass}>
               Roll number
+              <Optional />
             </label>
             <input id="rollNumber" name="rollNumber" defaultValue={student?.rollNumber ?? ""} className={inputClass} />
           </div>
@@ -76,12 +94,14 @@ export function StudentForm({
           <div className={fieldClass}>
             <label htmlFor="dob" className={labelClass}>
               Date of birth
+              <Optional />
             </label>
             <input id="dob" name="dob" type="date" defaultValue={student?.dob ?? ""} className={inputClass} />
           </div>
           <div className={fieldClass}>
             <label htmlFor="gender" className={labelClass}>
               Gender
+              <Optional />
             </label>
             <select id="gender" name="gender" defaultValue={student?.gender ?? ""} className={inputClass}>
               <option value="">Not specified</option>
@@ -93,12 +113,14 @@ export function StudentForm({
           <div className={fieldClass}>
             <label htmlFor="bloodGroup" className={labelClass}>
               Blood group
+              <Optional />
             </label>
             <input id="bloodGroup" name="bloodGroup" defaultValue={student?.bloodGroup ?? ""} className={inputClass} />
           </div>
           <div className={fieldClass}>
             <label htmlFor="categoryId" className={labelClass}>
               Category
+              <Optional />
             </label>
             <select id="categoryId" name="categoryId" defaultValue={student?.categoryId ?? ""} className={inputClass}>
               <option value="">Not specified</option>
@@ -112,6 +134,7 @@ export function StudentForm({
           <div className={fieldClass}>
             <label htmlFor="houseId" className={labelClass}>
               House
+              <Optional />
             </label>
             <select id="houseId" name="houseId" defaultValue={student?.houseId ?? ""} className={inputClass}>
               <option value="">Not specified</option>
@@ -123,10 +146,9 @@ export function StudentForm({
             </select>
           </div>
         </div>
-      </fieldset>
+      </Section>
 
-      <fieldset className="flex flex-col gap-4">
-        <legend className="text-sm font-semibold">Class &amp; section</legend>
+      <Section title="Class & section">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className={fieldClass}>
             <label htmlFor="classId" className={labelClass}>
@@ -158,17 +180,17 @@ export function StudentForm({
             </select>
           </div>
         </div>
-      </fieldset>
+      </Section>
 
-      <fieldset className="flex flex-col gap-4">
-        <legend className="text-sm font-semibold">Guardians</legend>
-        {([1, 2] as const).map((slot) => {
-          const existing = student?.guardians[slot - 1];
-          return (
-            <div key={slot} className="grid grid-cols-1 gap-4 rounded-md border border-border p-3 sm:grid-cols-2">
+      {([1, 2] as const).map((slot) => {
+        const existing = student?.guardians[slot - 1];
+        return (
+          <Section key={slot} title={`Guardian ${slot}`}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className={fieldClass}>
                 <label htmlFor={`guardian${slot}Name`} className={labelClass}>
-                  Guardian {slot} name
+                  Name
+                  <Optional />
                 </label>
                 <input
                   id={`guardian${slot}Name`}
@@ -196,18 +218,20 @@ export function StudentForm({
               <div className={fieldClass}>
                 <label htmlFor={`guardian${slot}Phone`} className={labelClass}>
                   Phone
+                  <Optional />
                 </label>
                 <input
                   id={`guardian${slot}Phone`}
                   name={`guardian${slot}Phone`}
-                  placeholder="+919415012345"
                   defaultValue={existing?.phone ?? ""}
                   className={inputClass}
                 />
+                <p className="text-xs text-muted-foreground">e.g. +919415012345</p>
               </div>
               <div className={fieldClass}>
                 <label htmlFor={`guardian${slot}Email`} className={labelClass}>
                   Email
+                  <Optional />
                 </label>
                 <input
                   id={`guardian${slot}Email`}
@@ -218,17 +242,22 @@ export function StudentForm({
                 />
               </div>
             </div>
-          );
-        })}
-      </fieldset>
+          </Section>
+        );
+      })}
 
       {state.error ? (
-        <p role="alert" className="rounded-md bg-danger px-3 py-2 text-sm text-danger-foreground">
+        <p role="alert" className="rounded-md border border-border bg-danger px-3 py-2 text-sm text-danger-foreground shadow-sm">
           {state.error}
         </p>
       ) : null}
 
-      <SubmitButton label={student ? "Save changes" : "Create student"} />
+      <div className="flex justify-end gap-2">
+        <Link href={cancelHref} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-secondary">
+          Cancel
+        </Link>
+        <SubmitButton label={student ? "Save changes" : "Create student"} />
+      </div>
     </form>
   );
 }

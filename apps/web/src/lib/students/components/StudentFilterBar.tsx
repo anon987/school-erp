@@ -1,76 +1,81 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import type { ClassOption, SectionOption } from "../types";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useUrlTransition } from "@/lib/core/useUrlTransition";
+import { SortableHeader, nextSortState, type SortDir } from "@/components/SortableHeader";
+import { PageSizeSelect } from "@/components/PageSizeSelect";
+import type { ClassOption, SectionOption, StudentSortKey } from "../types";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+export interface StudentDirectoryParams {
+  search: string;
+  classId: string;
+  sectionId: string;
+  sort: StudentSortKey | "";
+  dir: SortDir;
+  pageSize: number;
+}
+
 /**
- * Filters apply as you change them -- no separate "Filter" button. A select applies immediately
- * (a discrete choice, nothing to debounce); the free-text search field debounces so it doesn't
- * fire a navigation per keystroke. Either way the navigation itself runs inside startTransition,
- * so typing/clicking never blocks, and `children` (the table + pagination, still rendered
- * server-side and passed straight through) dims via isPending instead of the whole page
- * flashing to a blank loading state.
+ * Owns every interactive control on the Students directory -- search, class/section filters,
+ * sortable column headers, and the per-page selector -- as one useTransition, so the table dims
+ * for any of them, not just the filter fields. This is why the table's <thead> is built here
+ * rather than in the Server Component page: the header cells need the same navigate()/isPending
+ * this component already has for the filter fields, and splitting that across multiple
+ * independent client islands would mean each control dims a different, smaller area instead of
+ * the whole table reacting consistently (docs/design-system.md > Tables).
+ *
+ * `children` is the <tbody> content only -- still server-rendered and passed straight through,
+ * per the existing Server-Component-children-into-a-Client-Component pattern.
  */
 export function StudentFilterBar({
   classes,
   sections,
-  initialSearch,
-  initialClassId,
-  initialSectionId,
+  params,
+  pagination,
   children,
 }: {
   classes: ClassOption[];
   sections: SectionOption[];
-  initialSearch: string;
-  initialClassId: string;
-  initialSectionId: string;
+  params: StudentDirectoryParams;
+  pagination: ReactNode;
   children: ReactNode;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [isPending, startTransition] = useTransition();
-  const [search, setSearch] = useState(initialSearch);
+  const { isPending, navigate } = useUrlTransition();
+  const [search, setSearch] = useState(params.search);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
-  function navigate(next: { search: string; classId: string; sectionId: string }) {
-    const params = new URLSearchParams();
-    if (next.search) params.set("search", next.search);
-    if (next.classId) params.set("classId", next.classId);
-    if (next.sectionId) params.set("sectionId", next.sectionId);
-    startTransition(() => {
-      router.push(`${pathname}?${params.toString()}`);
+  function go(next: Partial<StudentDirectoryParams>) {
+    const merged = { ...params, search, ...next };
+    navigate({
+      search: merged.search,
+      classId: merged.classId,
+      sectionId: merged.sectionId,
+      sort: merged.sort,
+      dir: merged.dir,
+      pageSize: String(merged.pageSize),
     });
   }
 
   function onSearchChange(value: string) {
     setSearch(value);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(
-      () => navigate({ search: value, classId: initialClassId, sectionId: initialSectionId }),
-      SEARCH_DEBOUNCE_MS,
-    );
+    debounceRef.current = setTimeout(() => go({ search: value }), SEARCH_DEBOUNCE_MS);
   }
 
-  function onClassChange(classId: string) {
-    // Changing class clears section -- the previously-selected section may not belong to the
-    // newly-chosen class, and silently keeping it would filter to an impossible combination.
-    navigate({ search, classId, sectionId: "" });
-  }
-
-  function onSectionChange(sectionId: string) {
-    navigate({ search, classId: initialClassId, sectionId });
+  function onSort(key: string) {
+    const { sort, dir } = nextSortState(key, params.sort, params.dir);
+    go({ sort: sort as StudentSortKey | "", dir });
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-card p-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-card p-3 shadow-sm">
         <div className="flex flex-col gap-1">
-          <label htmlFor="search" className="text-sm font-medium">
+          <label htmlFor="search" className="text-xs font-medium text-muted-foreground">
             Search
           </label>
           <input
@@ -83,14 +88,14 @@ export function StudentFilterBar({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="classId" className="text-sm font-medium">
+          <label htmlFor="classId" className="text-xs font-medium text-muted-foreground">
             Class
           </label>
           <select
             id="classId"
             name="classId"
-            value={initialClassId}
-            onChange={(e) => onClassChange(e.target.value)}
+            value={params.classId}
+            onChange={(e) => go({ classId: e.target.value, sectionId: "" })}
             className="rounded-md border border-input bg-background px-3 py-2 text-base"
           >
             <option value="">All classes</option>
@@ -102,14 +107,14 @@ export function StudentFilterBar({
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="sectionId" className="text-sm font-medium">
+          <label htmlFor="sectionId" className="text-xs font-medium text-muted-foreground">
             Section
           </label>
           <select
             id="sectionId"
             name="sectionId"
-            value={initialSectionId}
-            onChange={(e) => onSectionChange(e.target.value)}
+            value={params.sectionId}
+            onChange={(e) => go({ sectionId: e.target.value })}
             className="rounded-md border border-input bg-background px-3 py-2 text-base"
           >
             <option value="">All sections</option>
@@ -127,7 +132,28 @@ export function StudentFilterBar({
       </div>
 
       <div className={isPending ? "opacity-50 transition-opacity duration-150" : "transition-opacity duration-150"}>
-        {children}
+        <div className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-secondary text-left text-secondary-foreground">
+                <SortableHeader label="Admission #" sortKey="admissionNumber" currentSort={params.sort} currentDir={params.dir} onSort={onSort} />
+                <SortableHeader label="Name" sortKey="name" currentSort={params.sort} currentDir={params.dir} onSort={onSort} />
+                <th className="px-3 py-2 font-medium">Class</th>
+                <th className="px-3 py-2 font-medium">Roll #</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>{children}</tbody>
+          </table>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <PageSizeSelect value={params.pageSize} onChange={(size) => go({ pageSize: size })} />
+          {pagination}
+        </div>
       </div>
     </div>
   );

@@ -73,10 +73,14 @@ export interface StudentFormOptions {
   categories: CategoryOption[];
 }
 
+export type StudentSortKey = "admissionNumber" | "name";
+
 export interface StudentDirectoryFilters {
   search?: string | undefined;
   classId?: string | undefined;
   sectionId?: string | undefined;
+  sort?: StudentSortKey | undefined;
+  dir?: "asc" | "desc" | undefined;
 }
 
 export interface StudentDirectoryPage {

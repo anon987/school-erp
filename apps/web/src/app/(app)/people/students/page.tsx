@@ -1,32 +1,22 @@
 import Link from "next/link";
-import { StatusBadge, type StatusState } from "@schoolerp/ui";
+import { Plus, Upload, GraduationCap, SearchX } from "lucide-react";
+import { StatusBadge } from "@schoolerp/ui";
 import { requireSession } from "@/lib/core/auth/requireSession";
 import { getPermissions } from "@/lib/core/auth/permissions";
 import { listStudents, getStudentFormOptions } from "@/lib/students/queries";
+import type { StudentSortKey } from "@/lib/students/types";
 import { Pagination } from "@/components/Pagination";
 import { StudentFilterBar } from "@/lib/students/components/StudentFilterBar";
+import { RowActionsMenu } from "@/components/RowActionsMenu";
+import { TwoLineCell } from "@/components/TwoLineCell";
+import { EmptyState } from "@/components/EmptyState";
+import { studentStatusBadgeState } from "@/lib/students/statusBadge";
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 
-function isNonActiveStatusState(value: string): value is StatusState {
-  return ["transferred", "withdrawn", "alumni"].includes(value);
+function isSortKey(value: string): value is StudentSortKey {
+  return value === "admissionNumber" || value === "name";
 }
-
-// student.status values don't map 1:1 onto StatusBadge's fixed semantics (which are
-// present/absent/late/paid/due/overdue/approved/pending) -- "withdrawn"/"transferred" read as
-// neutral-negative (danger), "alumni" as neutral (info). Mapped here rather than teaching
-// StatusBadge a new vocabulary per module.
-//
-// "active" is deliberately NOT in this map -- it's the default state for essentially every row
-// in the directory, so a badge on every line carries no information while still taking the most
-// visual weight on the row. The badge only appears for the exception (transferred/withdrawn/
-// alumni); an active student's status cell is blank, which is itself the signal ("nothing to
-// flag here").
-const STUDENT_STATUS_BADGE: Record<string, StatusState> = {
-  transferred: "overdue",
-  withdrawn: "absent",
-  alumni: "pending",
-};
 
 export default async function StudentsDirectoryPage({
   searchParams,
@@ -42,9 +32,18 @@ export default async function StudentsDirectoryPage({
   const search = params.search ?? "";
   const classId = params.classId ?? "";
   const sectionId = params.sectionId ?? "";
+  const sort = params.sort && isSortKey(params.sort) ? params.sort : "";
+  const dir = params.dir === "desc" ? "desc" : "asc";
+  const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE;
+  const hasActiveFilters = Boolean(search || classId || sectionId);
 
   const [directory, options] = await Promise.all([
-    listStudents(session.schoolId!, { search, classId: classId || undefined, sectionId: sectionId || undefined }, page, PAGE_SIZE),
+    listStudents(
+      session.schoolId!,
+      { search, classId: classId || undefined, sectionId: sectionId || undefined, sort: sort || undefined, dir },
+      page,
+      pageSize,
+    ),
     getStudentFormOptions(session.schoolId!),
   ]);
 
@@ -53,6 +52,9 @@ export default async function StudentsDirectoryPage({
     if (search) qs.set("search", search);
     if (classId) qs.set("classId", classId);
     if (sectionId) qs.set("sectionId", sectionId);
+    if (sort) qs.set("sort", sort);
+    if (dir !== "asc") qs.set("dir", dir);
+    if (pageSize !== DEFAULT_PAGE_SIZE) qs.set("pageSize", String(pageSize));
     qs.set("page", String(nextPage));
     return `/people/students?${qs.toString()}`;
   }
@@ -65,14 +67,16 @@ export default async function StudentsDirectoryPage({
           <div className="flex gap-2">
             <Link
               href="/people/students/import"
-              className="rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
             >
+              <Upload className="h-4 w-4" aria-hidden="true" />
               Import
             </Link>
             <Link
               href="/people/students/new"
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
+              <Plus className="h-4 w-4" aria-hidden="true" />
               New student
             </Link>
           </div>
@@ -82,60 +86,65 @@ export default async function StudentsDirectoryPage({
       <StudentFilterBar
         classes={options.classes}
         sections={options.sections}
-        initialSearch={search}
-        initialClassId={classId}
-        initialSectionId={sectionId}
+        params={{ search, classId, sectionId, sort, dir, pageSize }}
+        pagination={<Pagination page={directory.page} pageSize={directory.pageSize} total={directory.total} hrefFor={hrefFor} />}
       >
-        <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-secondary text-left text-secondary-foreground">
-                <th className="px-3 py-2 font-medium">Admission #</th>
-                <th className="px-3 py-2 font-medium">Name</th>
-                <th className="px-3 py-2 font-medium">Class</th>
-                <th className="px-3 py-2 font-medium">Roll #</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {directory.items.map((student) => (
-                <tr key={student.id} className="border-b border-border last:border-0 hover:bg-secondary/50">
-                  <td className="px-3 py-2">
-                    <Link
-                      href={`/people/students/${student.id}`}
-                      className="font-figures font-medium underline-offset-2 hover:underline"
-                    >
-                      {student.admissionNumber}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 font-medium">
-                    {student.firstName} {student.lastName}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {student.className ? `${student.className} - ${student.sectionName}` : "—"}
-                  </td>
-                  <td className="px-3 py-2 font-figures text-muted-foreground">{student.rollNumber ?? "—"}</td>
-                  <td className="px-3 py-2">
-                    {isNonActiveStatusState(student.status) ? (
-                      <StatusBadge state={STUDENT_STATUS_BADGE[student.status]!} label={student.status} />
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-              {directory.items.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                    No students match these filters.
-                  </td>
-                </tr>
+        {directory.items.map((student) => (
+          <tr key={student.id} className="border-b border-border last:border-0 hover:bg-secondary/50">
+            <td className="px-3 py-1.5">
+              <Link
+                href={`/people/students/${student.id}`}
+                className="font-figures font-medium underline-offset-2 hover:underline"
+              >
+                {student.admissionNumber}
+              </Link>
+            </td>
+            <td className="px-3 py-1.5 font-medium">
+              {student.firstName} {student.lastName}
+            </td>
+            <td className="px-3 py-1.5">
+              <TwoLineCell
+                primary={student.className ?? "—"}
+                secondary={student.sectionName ? `Section ${student.sectionName}` : null}
+              />
+            </td>
+            <td className="px-3 py-1.5 font-figures text-muted-foreground">{student.rollNumber ?? "—"}</td>
+            <td className="px-3 py-1.5">
+              {studentStatusBadgeState(student.status) ? (
+                <StatusBadge state={studentStatusBadgeState(student.status)!} label={student.status} />
               ) : null}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-4">
-          <Pagination page={directory.page} pageSize={directory.pageSize} total={directory.total} hrefFor={hrefFor} />
-        </div>
+            </td>
+            <td className="px-3 py-1.5 text-right">
+              <RowActionsMenu
+                actions={[
+                  { label: "View", href: `/people/students/${student.id}` },
+                  ...(canManage ? [{ label: "Edit", href: `/people/students/${student.id}/edit` }] : []),
+                ]}
+              />
+            </td>
+          </tr>
+        ))}
+        {directory.items.length === 0 ? (
+          <tr>
+            <td colSpan={6}>
+              {hasActiveFilters ? (
+                <EmptyState
+                  icon={SearchX}
+                  title="No students match these filters"
+                  description="Try a different search term, or clear the filters."
+                  action={{ label: "Clear filters", href: "/people/students" }}
+                />
+              ) : (
+                <EmptyState
+                  icon={GraduationCap}
+                  title="No students yet"
+                  description="Import the school's existing register to get started."
+                  action={canManage ? { label: "Import students", href: "/people/students/import" } : undefined}
+                />
+              )}
+            </td>
+          </tr>
+        ) : null}
       </StudentFilterBar>
     </div>
   );
