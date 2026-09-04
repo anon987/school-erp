@@ -39,11 +39,18 @@ export interface NavGroup {
 export const DASHBOARD_ITEM: NavItem = { labelKey: "nav.dashboard", href: "/dashboard" };
 
 export const NAV_GROUPS: NavGroup[] = [
-  // people/: Students (§B), Admissions (§C, P2), Staff & HR (§D) -- added as those land.
   // academics/: Attendance (§E), Exams (§G), Timetable (§I, P2), Homework (§J, P2).
   // finance/: Fees (§F), Accounts & Expenses (§N, P3), Payroll (§O, P3).
   // operations/: Transport/Library/Hostel/Inventory (§P/Q/R/S, P3).
   // communication/: Communication (§K, P2).
+  {
+    // No permission on this: the directory is broad-read/gated-write (RLS already scopes
+    // reads to the caller's school; only creating/editing needs manage_students) -- matching
+    // that here, not gating the nav link itself behind the write permission, which would hide
+    // it from teachers/accountants who should still be able to browse.
+    labelKey: "nav.group.people",
+    items: [{ labelKey: "nav.students", href: "/people/students" }],
+  },
   {
     labelKey: "nav.group.settings",
     items: [
