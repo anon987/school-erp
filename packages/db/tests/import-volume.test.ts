@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { generateStudents, type StudentRow } from "./generatePilotDataset";
+import { generateStaff, generateStudents, type StaffRow, type StudentRow } from "./generatePilotDataset";
 
 /**
  * Runs ~2,000 realistic student rows through the REAL import pipeline (stage -> validate ->
@@ -18,6 +18,7 @@ const PILOT_SCHOOL_ID = "33333333-3333-3333-3333-333333333333";
 const PILOT_OWNER_EMAIL = "owner@hansraj.schoolerp.test";
 const PILOT_PASSWORD = "Seed-Test-Passw0rd!";
 const STUDENT_COUNT = 2000;
+const STAFF_COUNT = 60;
 const CHUNK_SIZE = 500;
 
 function requireEnv(name: string): string {
@@ -185,6 +186,78 @@ describe("import pipeline at realistic volume (~2,000 students)", () => {
       // can't see. See this file's git history / CI logs for actual measured numbers.
     },
     600000, // 10 minute ceiling for this one test -- generous on purpose, we're MEASURING, not assuming
+  );
+
+  it(
+    "stages, validates, and commits ~60 staff through the real import pipeline",
+    async () => {
+      // generateStaff exists in generatePilotDataset.ts but was never actually wired into a
+      // test that runs it -- pilot_school_setup.sql's comment claims staff are "populated
+      // separately, through the real import pipeline (see import-volume.test.ts)", but that
+      // was never true: only the student half of that claim was ever implemented. The result
+      // was a pilot school with 2,000 real students and zero staff, invisible until someone
+      // opened /people/staff. This test is the fix -- it's what actually populates staff, not
+      // just a check that a hypothetical pipeline would work.
+      const staff = generateStaff(STAFF_COUNT);
+
+      const { data: batch, error: batchError } = await client
+        .from("import_batch")
+        .insert({
+          school_id: PILOT_SCHOOL_ID,
+          entity_type: "staff",
+          match_mode: "none",
+          file_name: "pilot-staff-volume.csv",
+          uploaded_by_auth_user_id: authUserId,
+          is_dry_run: false,
+        })
+        .select("id")
+        .single();
+      expect(batchError).toBeNull();
+      const batchId = (batch as unknown as { id: string }).id;
+
+      const rows = staff.map((s: StaffRow, idx: number) => ({
+        batch_id: batchId,
+        row_number: idx + 1,
+        raw_data: s,
+        mapped_data: s,
+      }));
+      const { error: insertError } = await client.from("import_row").insert(rows);
+      expect(insertError).toBeNull();
+
+      const { error: validateError, chunkCalls: validateChunks } = await runChunkedRpc(client, "fn_validate_import_batch", {
+        p_batch_id: batchId,
+        p_limit: 300,
+      });
+      expect(validateError).toBeNull();
+      console.log(`[volume] validated ${STAFF_COUNT} staff rows in ${validateChunks} chunk calls`);
+
+      const { data: afterValidate } = await client
+        .from("import_batch")
+        .select("status, total_rows, created_count, rejected_count")
+        .eq("id", batchId)
+        .single();
+      const counts = afterValidate as unknown as { status: string; total_rows: number; created_count: number; rejected_count: number };
+      expect(counts.status).toBe("validated");
+      expect(counts.total_rows).toBe(STAFF_COUNT);
+      expect(counts.rejected_count).toBe(0);
+      expect(counts.created_count).toBe(STAFF_COUNT);
+
+      const { error: commitError, chunkCalls: commitChunks } = await runChunkedRpc(client, "fn_commit_import_batch", {
+        p_batch_id: batchId,
+        p_actor_auth_user_id: authUserId,
+        p_limit: 300,
+      });
+      expect(commitError).toBeNull();
+      console.log(`[volume] committed ${STAFF_COUNT} staff rows in ${commitChunks} chunk calls`);
+
+      const { count: staffCount, error: countError } = await client
+        .from("staff")
+        .select("id", { count: "exact", head: true })
+        .eq("school_id", PILOT_SCHOOL_ID);
+      expect(countError).toBeNull();
+      expect(staffCount).toBeGreaterThanOrEqual(STAFF_COUNT);
+    },
+    120000,
   );
 
   it(
