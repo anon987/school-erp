@@ -55,7 +55,7 @@ export default async function MasterDataPage() {
           rows={overview.departments}
           createAction={createDepartmentAction}
           updateAction={updateDepartmentAction}
-          deleteAction={(id) => deleteDepartmentAction.bind(null, id)}
+          deleteAction={deleteDepartmentAction}
           placeholder="e.g. Science"
         />
         <NamedListSection
@@ -63,7 +63,7 @@ export default async function MasterDataPage() {
           rows={overview.designations}
           createAction={createDesignationAction}
           updateAction={updateDesignationAction}
-          deleteAction={(id) => deleteDesignationAction.bind(null, id)}
+          deleteAction={deleteDesignationAction}
           placeholder="e.g. TGT"
         />
         <StudentCategoriesSection categories={overview.studentCategories} />
@@ -72,7 +72,7 @@ export default async function MasterDataPage() {
           rows={overview.houses}
           createAction={createHouseAction}
           updateAction={updateHouseAction}
-          deleteAction={(id) => deleteHouseAction.bind(null, id)}
+          deleteAction={deleteHouseAction}
           placeholder="e.g. Ashoka"
         />
       </div>

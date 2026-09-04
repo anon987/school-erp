@@ -25,6 +25,15 @@ function AddButton() {
  * Department, designation, and house are all bare (school_id, name) rows with identical
  * add/edit/delete behaviour -- one list component parameterised by title/actions, not three
  * near-identical ones.
+ *
+ * deleteAction takes the raw (id, prevState, formData) => State action, not a pre-bound one --
+ * this component does the `.bind(null, row.id)` itself, at render time, inside the Client
+ * Component. Passing a bound-per-row closure as the PROP VALUE from the Server Component page
+ * doesn't work: a plain arrow function like `(id) => deleteXAction.bind(null, id)` is not a
+ * Server Action reference, just a regular closure, and React Server Components can't serialize
+ * that across the server->client boundary ("Functions cannot be passed directly to Client
+ * Components"). The raw action itself IS a Server Action reference (actions.ts is "use server")
+ * and crosses fine; binding it to an id has to happen on this side of the boundary.
  */
 export function NamedListSection({
   title,
@@ -38,7 +47,7 @@ export function NamedListSection({
   rows: NamedRow[];
   createAction: (prevState: MasterDataFormState, formData: FormData) => Promise<MasterDataFormState>;
   updateAction: (id: string, prevState: MasterDataFormState, formData: FormData) => Promise<MasterDataFormState>;
-  deleteAction: (id: string) => (prevState: MasterDataFormState, formData: FormData) => Promise<MasterDataFormState>;
+  deleteAction: (id: string, prevState: MasterDataFormState, formData: FormData) => Promise<MasterDataFormState>;
   placeholder: string;
 }) {
   const [state, formAction] = useFormState(createAction, initialState);
@@ -51,7 +60,7 @@ export function NamedListSection({
           {rows.map((row) => (
             <li key={row.id} className="flex items-center justify-between py-1 text-sm">
               <EditableText id={row.id} value={row.name} fieldName="name" updateAction={updateAction} />
-              <DeleteRowButton action={deleteAction(row.id)} />
+              <DeleteRowButton action={deleteAction.bind(null, row.id)} />
             </li>
           ))}
         </ul>
