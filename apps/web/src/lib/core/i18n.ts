@@ -12,6 +12,7 @@ const dictionary = {
   "nav.staff": "Staff",
   "nav.group.settings": "Settings",
   "nav.school_profile": "School Profile",
+  "nav.master_data": "Master Data",
   "nav.branding": "Branding",
   "nav.members": "Members & Roles",
   "nav.audit_log": "Audit Log",

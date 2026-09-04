@@ -58,6 +58,7 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: "nav.group.settings",
     items: [
       { labelKey: "nav.school_profile", href: "/settings/school", permission: "school.manage_profile" },
+      { labelKey: "nav.master_data", href: "/settings/master-data", permission: "school.manage_master_data" },
       { labelKey: "nav.branding", href: "/settings/branding", permission: "school.manage_branding" },
       { labelKey: "nav.members", href: "/settings/members", permission: "school.manage_members" },
       { labelKey: "nav.audit_log", href: "/settings/audit-log", permission: "school.view_audit_log" },
