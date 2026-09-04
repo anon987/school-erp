@@ -29,7 +29,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
           : "flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-secondary hover:text-secondary-foreground"
       }
     >
-      <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+      {item.icon}
       {t(item.labelKey)}
     </Link>
   );

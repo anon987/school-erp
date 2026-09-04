@@ -1,21 +1,12 @@
-import {
-  LayoutDashboard,
-  GraduationCap,
-  Users,
-  School,
-  Settings2,
-  Palette,
-  UserCog,
-  History,
-  type LucideIcon,
-} from "lucide-react";
+import type { ReactNode } from "react";
+import { LayoutDashboard, GraduationCap, Users, School, Settings2, Palette, UserCog, History } from "lucide-react";
 import type { TranslationKey } from "./i18n";
 
 export interface NavItem {
   labelKey: TranslationKey;
   href: string;
   /** docs/design-system.md > Navigation: every nav item gets a leading icon, no exceptions. */
-  icon: LucideIcon;
+  icon: ReactNode;
   /** Omit for items every signed-in member sees regardless of role. */
   permission?: string;
 }
@@ -24,6 +15,8 @@ export interface NavGroup {
   labelKey: TranslationKey;
   items: NavItem[];
 }
+
+const ICON_CLASS = "h-5 w-5 shrink-0";
 
 /**
  * Navigation is permission-aware, not role-aware, per docs/schoolerp_features.md §1.2: "A
@@ -49,11 +42,18 @@ export interface NavGroup {
  * through the same translation lookup as everything else from day one instead of being
  * retrofitted later.
  *
- * Icons are plain component references (lucide-react), not JSX -- safe to import into this
- * server-shared data file since nothing here renders; SidebarNav (Client Component) is what
- * actually invokes them.
+ * `icon` is a rendered element (`<LayoutDashboard />`), not a bare component reference. This
+ * file is server-shared data (getVisibleNavGroups's output crosses into SidebarNav, a Client
+ * Component, as a prop) -- React Server Components can serialize a rendered element across that
+ * boundary but not a raw function/component reference, which is exactly what a bare
+ * `icon: LayoutDashboard` produced ("Functions cannot be passed directly to Client Components").
+ * Rendering the icon here, once, is also why this file is .tsx and not .ts.
  */
-export const DASHBOARD_ITEM: NavItem = { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard };
+export const DASHBOARD_ITEM: NavItem = {
+  labelKey: "nav.dashboard",
+  href: "/dashboard",
+  icon: <LayoutDashboard className={ICON_CLASS} aria-hidden="true" />,
+};
 
 export const NAV_GROUPS: NavGroup[] = [
   // academics/: Attendance (§E), Exams (§G), Timetable (§I, P2), Homework (§J, P2).
@@ -67,18 +67,43 @@ export const NAV_GROUPS: NavGroup[] = [
     // hide it from teachers/accountants who should still be able to browse.
     labelKey: "nav.group.people",
     items: [
-      { labelKey: "nav.students", href: "/people/students", icon: GraduationCap },
-      { labelKey: "nav.staff", href: "/people/staff", icon: Users },
+      { labelKey: "nav.students", href: "/people/students", icon: <GraduationCap className={ICON_CLASS} aria-hidden="true" /> },
+      { labelKey: "nav.staff", href: "/people/staff", icon: <Users className={ICON_CLASS} aria-hidden="true" /> },
     ],
   },
   {
     labelKey: "nav.group.settings",
     items: [
-      { labelKey: "nav.school_profile", href: "/settings/school", icon: School, permission: "school.manage_profile" },
-      { labelKey: "nav.master_data", href: "/settings/master-data", icon: Settings2, permission: "school.manage_master_data" },
-      { labelKey: "nav.branding", href: "/settings/branding", icon: Palette, permission: "school.manage_branding" },
-      { labelKey: "nav.members", href: "/settings/members", icon: UserCog, permission: "school.manage_members" },
-      { labelKey: "nav.audit_log", href: "/settings/audit-log", icon: History, permission: "school.view_audit_log" },
+      {
+        labelKey: "nav.school_profile",
+        href: "/settings/school",
+        icon: <School className={ICON_CLASS} aria-hidden="true" />,
+        permission: "school.manage_profile",
+      },
+      {
+        labelKey: "nav.master_data",
+        href: "/settings/master-data",
+        icon: <Settings2 className={ICON_CLASS} aria-hidden="true" />,
+        permission: "school.manage_master_data",
+      },
+      {
+        labelKey: "nav.branding",
+        href: "/settings/branding",
+        icon: <Palette className={ICON_CLASS} aria-hidden="true" />,
+        permission: "school.manage_branding",
+      },
+      {
+        labelKey: "nav.members",
+        href: "/settings/members",
+        icon: <UserCog className={ICON_CLASS} aria-hidden="true" />,
+        permission: "school.manage_members",
+      },
+      {
+        labelKey: "nav.audit_log",
+        href: "/settings/audit-log",
+        icon: <History className={ICON_CLASS} aria-hidden="true" />,
+        permission: "school.view_audit_log",
+      },
     ],
   },
 ];
