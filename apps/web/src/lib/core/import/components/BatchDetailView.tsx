@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getImportBatch, getRejectedRows } from "../queries";
 import { CommitButtonForm, RevertButtonForm } from "./BatchActions";
 import type { ImportEntityType } from "../types";
+import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
 
 const REVERT_WINDOW_DAYS = 7;
 
@@ -20,10 +21,12 @@ export async function BatchDetailView({
   schoolId,
   batchId,
   redirectBasePath,
+  breadcrumbs,
 }: {
   schoolId: string;
   batchId: string;
   redirectBasePath: string;
+  breadcrumbs: BreadcrumbItem[];
 }) {
   const batch = await getImportBatch(schoolId, batchId);
   if (!batch) notFound();
@@ -33,6 +36,8 @@ export async function BatchDetailView({
 
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs items={breadcrumbs} />
+
       <div>
         <h1 className="text-2xl font-semibold">{batch.fileName}</h1>
         <p className="text-sm text-muted-foreground">
@@ -41,7 +46,7 @@ export async function BatchDetailView({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 rounded-md border border-border bg-card p-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 rounded-md border border-border bg-card p-4 shadow-sm sm:grid-cols-4">
         <div>
           <p className="font-figures text-2xl font-semibold">{batch.totalRows}</p>
           <p className="text-xs text-muted-foreground">Total rows</p>
@@ -61,7 +66,7 @@ export async function BatchDetailView({
       </div>
 
       {rejectedRows.length > 0 ? (
-        <section className="overflow-x-auto rounded-md border border-border">
+        <section className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-secondary text-left text-secondary-foreground">
@@ -73,9 +78,9 @@ export async function BatchDetailView({
             <tbody>
               {rejectedRows.map((row) => (
                 <tr key={row.rowNumber} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 font-figures">{row.rowNumber}</td>
-                  <td className="px-3 py-2 text-danger-solid">{row.rejectionReason}</td>
-                  <td className="px-3 py-2 text-muted-foreground">
+                  <td className="px-3 py-1.5 font-figures">{row.rowNumber}</td>
+                  <td className="px-3 py-1.5 text-danger-solid">{row.rejectionReason}</td>
+                  <td className="px-3 py-1.5 text-muted-foreground">
                     {row.rawData.first_name} {row.rawData.last_name}
                   </td>
                 </tr>

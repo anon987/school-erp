@@ -8,7 +8,16 @@ export default async function StudentImportBatchPage({ params }: { params: Promi
 
   return (
     <RequirePermission permission="school.manage_students">
-      <BatchDetailView schoolId={session.schoolId!} batchId={batchId} redirectBasePath="/people/students/import" />
+      <BatchDetailView
+        schoolId={session.schoolId!}
+        batchId={batchId}
+        redirectBasePath="/people/students/import"
+        breadcrumbs={[
+          { label: "Students", href: "/people/students" },
+          { label: "Import", href: "/people/students/import" },
+          { label: "Batch" },
+        ]}
+      />
     </RequirePermission>
   );
 }

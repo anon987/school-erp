@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Undo2 } from "lucide-react";
 import { useFormState, useFormStatus } from "react-dom";
 import { commitImportBatchAction, revertImportBatchAction, type CommitState, type RevertState } from "../actions";
 import type { ImportEntityType } from "../types";
@@ -10,8 +11,9 @@ function CommitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+      className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
     >
+      <Check className="h-4 w-4" aria-hidden="true" />
       {pending ? "Committing… this can take a little while for large files" : "Commit this import"}
     </button>
   );
@@ -50,8 +52,9 @@ function RevertButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-md border border-danger-solid px-4 py-2 text-sm font-medium text-danger-solid hover:bg-danger disabled:opacity-60"
+      className="flex items-center gap-2 rounded-md border border-danger-solid px-4 py-2 text-sm font-medium text-danger-solid hover:bg-danger disabled:opacity-60 disabled:cursor-not-allowed"
     >
+      <Undo2 className="h-4 w-4" aria-hidden="true" />
       {pending ? "Checking…" : "Revert this import"}
     </button>
   );

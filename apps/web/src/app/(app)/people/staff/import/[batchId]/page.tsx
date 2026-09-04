@@ -8,7 +8,16 @@ export default async function StaffImportBatchPage({ params }: { params: Promise
 
   return (
     <RequirePermission permission="school.manage_staff">
-      <BatchDetailView schoolId={session.schoolId!} batchId={batchId} redirectBasePath="/people/staff/import" />
+      <BatchDetailView
+        schoolId={session.schoolId!}
+        batchId={batchId}
+        redirectBasePath="/people/staff/import"
+        breadcrumbs={[
+          { label: "Staff", href: "/people/staff" },
+          { label: "Import", href: "/people/staff/import" },
+          { label: "Batch" },
+        ]}
+      />
     </RequirePermission>
   );
 }
