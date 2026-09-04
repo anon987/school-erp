@@ -64,6 +64,7 @@ These are working estimates for focused solo development. Add buffer for client 
 - Staff CRUD, departments, designations, subject assignment
 - Excel import for students, guardians, staff with validation reporting
 - `/settings/members` role management UI — the school must be able to assign roles to its own staff (pilot: ~60 people) without SQL access. Depends on `apps/worker` gaining an HTTP entry point (see `CLAUDE.md` § Architecture rules); currently a placeholder page. Blocks pilot onboarding — do not let this slip to a later phase.
+- Import column-mapping UI — the pilot's real Students/Staff files come off paper registers and Excel and will not match our template headers. The import pipeline currently requires an exact header match (no mapping step exists yet: uploaded column names are used verbatim as field keys), so every row in a real file fails. A mapping screen (best-guess column matching, confirmed by the user, saved per school+entity so re-uploads across cleanup rounds don't repeat it) is required before the pilot's real data can go through this pipeline at all. Same tier as `/settings/members` above — blocks pilot onboarding, do not let this slip to a later phase.
 
 **Weeks 6–7 — Attendance**
 - Class-wise daily attendance, mobile-optimised
