@@ -92,6 +92,12 @@ integrations/
 
 Schools arrive with vendors already chosen. A school with an existing GPS contract or biometric device must be servable without forking the code.
 
+### apps/worker needs an HTTP entry point before real role management can ship
+
+`apps/worker` today is jobs/webhooks/reconciliation code invoked as scripts/cron — it has no HTTP server. That's fine for its current jobs, but it blocks `/settings/members` (role assignment for a school's staff): the mutation that grants/revokes roles (`setMemberRoles`) requires the service-role key, and the service-role key must never reach the client (rule 1 above). The web app cannot call it directly.
+
+`/settings/members` currently ships as a placeholder for exactly this reason. Building it out requires `apps/worker` to expose an HTTP endpoint that the web app's Server Actions can call (forwarding the caller's own session so the endpoint can authorize the request), not a shortcut where the web app talks to `setMemberRoles` with the service-role key itself. Treat "give `apps/worker` an HTTP entry point" as a prerequisite task for this ticket, not an optional refactor — it's a P1 blocker for pilot onboarding (the pilot school needs to assign roles to ~60 staff, which cannot happen by hand in SQL for a real customer).
+
 ### apps/web code organization
 
 Feature-based, not layer-based — a layer folder (`lib/queries`, `lib/actions`) becomes an unsorted dumping ground the moment more than two or three modules exist, and this product has 18.

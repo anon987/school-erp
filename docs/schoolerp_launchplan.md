@@ -63,6 +63,7 @@ These are working estimates for focused solo development. Add buffer for client 
 - Student directory with search, filters, saved views
 - Staff CRUD, departments, designations, subject assignment
 - Excel import for students, guardians, staff with validation reporting
+- `/settings/members` role management UI — the school must be able to assign roles to its own staff (pilot: ~60 people) without SQL access. Depends on `apps/worker` gaining an HTTP entry point (see `CLAUDE.md` § Architecture rules); currently a placeholder page. Blocks pilot onboarding — do not let this slip to a later phase.
 
 **Weeks 6–7 — Attendance**
 - Class-wise daily attendance, mobile-optimised
