@@ -4,19 +4,25 @@ import { requireSession } from "@/lib/core/auth/requireSession";
 import { getPermissions } from "@/lib/core/auth/permissions";
 import { listStudents, getStudentFormOptions } from "@/lib/students/queries";
 import { Pagination } from "@/components/Pagination";
+import { StudentFilterBar } from "@/lib/students/components/StudentFilterBar";
 
 const PAGE_SIZE = 25;
 
-function isStatusState(value: string): value is StatusState {
-  return ["active", "transferred", "withdrawn", "alumni"].includes(value);
+function isNonActiveStatusState(value: string): value is StatusState {
+  return ["transferred", "withdrawn", "alumni"].includes(value);
 }
 
 // student.status values don't map 1:1 onto StatusBadge's fixed semantics (which are
-// present/absent/late/paid/due/overdue/approved/pending) -- "active" reads as good (success),
-// "withdrawn"/"transferred" as neutral-negative (danger), "alumni" as neutral (info). Mapped
-// here rather than teaching StatusBadge a new vocabulary per module.
+// present/absent/late/paid/due/overdue/approved/pending) -- "withdrawn"/"transferred" read as
+// neutral-negative (danger), "alumni" as neutral (info). Mapped here rather than teaching
+// StatusBadge a new vocabulary per module.
+//
+// "active" is deliberately NOT in this map -- it's the default state for essentially every row
+// in the directory, so a badge on every line carries no information while still taking the most
+// visual weight on the row. The badge only appears for the exception (transferred/withdrawn/
+// alumni); an active student's status cell is blank, which is itself the signal ("nothing to
+// flag here").
 const STUDENT_STATUS_BADGE: Record<string, StatusState> = {
-  active: "approved",
   transferred: "overdue",
   withdrawn: "absent",
   alumni: "pending",
@@ -73,109 +79,64 @@ export default async function StudentsDirectoryPage({
         ) : null}
       </div>
 
-      <form method="get" className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-card p-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="search" className="text-sm font-medium">
-            Search
-          </label>
-          <input
-            id="search"
-            name="search"
-            defaultValue={search}
-            placeholder="Name or admission number"
-            className="rounded-md border border-input bg-background px-3 py-2 text-base"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="classId" className="text-sm font-medium">
-            Class
-          </label>
-          <select
-            id="classId"
-            name="classId"
-            defaultValue={classId}
-            className="rounded-md border border-input bg-background px-3 py-2 text-base"
-          >
-            <option value="">All classes</option>
-            {options.classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="sectionId" className="text-sm font-medium">
-            Section
-          </label>
-          <select
-            id="sectionId"
-            name="sectionId"
-            defaultValue={sectionId}
-            className="rounded-md border border-input bg-background px-3 py-2 text-base"
-          >
-            <option value="">All sections</option>
-            {options.sections.map((s) => {
-              const className = options.classes.find((c) => c.id === s.classId)?.name ?? "";
-              return (
-                <option key={s.id} value={s.id}>
-                  {className} - {s.name}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-        <button type="submit" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary">
-          Filter
-        </button>
-      </form>
-
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-secondary text-left text-secondary-foreground">
-              <th className="px-3 py-2 font-medium">Admission #</th>
-              <th className="px-3 py-2 font-medium">Name</th>
-              <th className="px-3 py-2 font-medium">Class</th>
-              <th className="px-3 py-2 font-medium">Roll #</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {directory.items.map((student) => (
-              <tr key={student.id} className="border-b border-border last:border-0 hover:bg-secondary/50">
-                <td className="px-3 py-2">
-                  <Link href={`/people/students/${student.id}`} className="font-figures underline-offset-2 hover:underline">
-                    {student.admissionNumber}
-                  </Link>
-                </td>
-                <td className="px-3 py-2">
-                  {student.firstName} {student.lastName}
-                </td>
-                <td className="px-3 py-2">
-                  {student.className ? `${student.className} - ${student.sectionName}` : "—"}
-                </td>
-                <td className="px-3 py-2 font-figures">{student.rollNumber ?? "—"}</td>
-                <td className="px-3 py-2">
-                  <StatusBadge
-                    state={isStatusState(student.status) ? STUDENT_STATUS_BADGE[student.status]! : "pending"}
-                    label={student.status}
-                  />
-                </td>
+      <StudentFilterBar
+        classes={options.classes}
+        sections={options.sections}
+        initialSearch={search}
+        initialClassId={classId}
+        initialSectionId={sectionId}
+      >
+        <div className="overflow-x-auto rounded-md border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-secondary text-left text-secondary-foreground">
+                <th className="px-3 py-2 font-medium">Admission #</th>
+                <th className="px-3 py-2 font-medium">Name</th>
+                <th className="px-3 py-2 font-medium">Class</th>
+                <th className="px-3 py-2 font-medium">Roll #</th>
+                <th className="px-3 py-2 font-medium">Status</th>
               </tr>
-            ))}
-            {directory.items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                  No students match these filters.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {directory.items.map((student) => (
+                <tr key={student.id} className="border-b border-border last:border-0 hover:bg-secondary/50">
+                  <td className="px-3 py-2">
+                    <Link
+                      href={`/people/students/${student.id}`}
+                      className="font-figures font-medium underline-offset-2 hover:underline"
+                    >
+                      {student.admissionNumber}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2 font-medium">
+                    {student.firstName} {student.lastName}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {student.className ? `${student.className} - ${student.sectionName}` : "—"}
+                  </td>
+                  <td className="px-3 py-2 font-figures text-muted-foreground">{student.rollNumber ?? "—"}</td>
+                  <td className="px-3 py-2">
+                    {isNonActiveStatusState(student.status) ? (
+                      <StatusBadge state={STUDENT_STATUS_BADGE[student.status]!} label={student.status} />
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+              {directory.items.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                    No students match these filters.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
 
-      <Pagination page={directory.page} pageSize={directory.pageSize} total={directory.total} hrefFor={hrefFor} />
+        <div className="mt-4">
+          <Pagination page={directory.page} pageSize={directory.pageSize} total={directory.total} hrefFor={hrefFor} />
+        </div>
+      </StudentFilterBar>
     </div>
   );
 }
