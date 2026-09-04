@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { deriveBrandTokens } from "@schoolerp/ui";
 import { requireSession } from "@/lib/core/auth/requireSession";
 import { getPermissions } from "@/lib/core/auth/permissions";
@@ -7,6 +6,7 @@ import { DASHBOARD_ITEM, getVisibleNavGroups } from "@/lib/core/nav";
 import { t } from "@/lib/core/i18n";
 import { ThemeToggle } from "@/lib/core/theme/ThemeToggle";
 import { signOutAction } from "@/lib/core/auth/actions";
+import { SidebarNav } from "@/components/SidebarNav";
 
 /**
  * The role-aware shell. Every authenticated page renders inside this layout, which:
@@ -60,7 +60,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ) : null}
       <div className="school-theme flex min-h-screen flex-col">
         <header className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-sm font-medium">{branding?.displayName ?? "School ERP"}</span>
+          <div className="flex items-center gap-2">
+            {branding?.logoUrl ? (
+              // Plain <img>, not next/image: a school's logo is an arbitrary external URL
+              // (Supabase Storage signed URL), not a static build asset next/image can optimise
+              // at build time, and would need next.config.mjs remotePatterns per school/host.
+              <img src={branding.logoUrl} alt="" className="h-7 w-7 rounded object-contain" />
+            ) : null}
+            <span className="text-sm font-medium">{branding?.displayName ?? "School ERP"}</span>
+          </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
             <span className="text-sm text-muted-foreground">{session.email ?? session.authUserId}</span>
@@ -75,37 +83,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </header>
         <div className="flex flex-1">
-          <nav aria-label="Primary" className="w-56 shrink-0 border-r border-border p-2">
-            <ul className="flex flex-col gap-1">
-              <li>
-                <Link
-                  href={DASHBOARD_ITEM.href}
-                  className="block rounded px-2 py-1.5 text-sm hover:bg-secondary hover:text-secondary-foreground"
-                >
-                  {t(DASHBOARD_ITEM.labelKey)}
-                </Link>
-              </li>
-            </ul>
-            {visibleGroups.map((group) => (
-              <div key={group.labelKey} className="mt-4">
-                <p className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {t(group.labelKey)}
-                </p>
-                <ul className="mt-1 flex flex-col gap-1">
-                  {group.items.map((item) => (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className="block rounded px-2 py-1.5 text-sm hover:bg-secondary hover:text-secondary-foreground"
-                      >
-                        {t(item.labelKey)}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
+          <SidebarNav dashboardItem={DASHBOARD_ITEM} groups={visibleGroups} />
           <main className="flex-1 p-4">{children}</main>
         </div>
       </div>
