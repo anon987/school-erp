@@ -1,9 +1,10 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { createSectionAction, deleteSectionAction, type MasterDataFormState } from "../actions";
+import { createSectionAction, deleteSectionAction, updateSectionAction, type MasterDataFormState } from "../actions";
 import type { ClassWithSections } from "../types";
 import { DeleteRowButton } from "./DeleteRowButton";
+import { EditableText } from "./EditableText";
 
 const initialState: MasterDataFormState = {};
 
@@ -29,7 +30,7 @@ function ClassSections({ klass }: { klass: ClassWithSections }) {
       <div className="flex flex-wrap gap-2">
         {klass.sections.map((s) => (
           <span key={s.id} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm">
-            {s.name}
+            <EditableText id={s.id} value={s.name} fieldName="name" updateAction={updateSectionAction} />
             <DeleteRowButton action={deleteSectionAction.bind(null, s.id)} />
           </span>
         ))}
@@ -57,7 +58,7 @@ function ClassSections({ klass }: { klass: ClassWithSections }) {
  */
 export function SectionsSection({ classes }: { classes: ClassWithSections[] }) {
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-border p-4">
+    <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 shadow-sm">
       <div>
         <h2 className="text-lg font-semibold">3. Sections</h2>
         <p className="text-sm text-muted-foreground">Required before students can be enrolled in that class.</p>

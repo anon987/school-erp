@@ -117,6 +117,35 @@ export async function setCurrentAcademicYearAction(
   return {};
 }
 
+export async function updateAcademicYearAction(
+  id: string,
+  _prevState: MasterDataFormState,
+  formData: FormData,
+): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = academicYearInputSchema.safeParse({
+    name: readField(formData, "name"),
+    startDate: readField(formData, "startDate"),
+    endDate: readField(formData, "endDate"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("academic_year")
+    .update({ name: parsed.data.name, start_date: parsed.data.startDate, end_date: parsed.data.endDate })
+    .eq("id", id)
+    .eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.academic_year.updated", id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
 export async function deleteAcademicYearAction(
   id: string,
   _prevState: MasterDataFormState,
@@ -159,6 +188,23 @@ export async function createClassAction(_prevState: MasterDataFormState, formDat
   return {};
 }
 
+export async function updateClassAction(id: string, _prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = classInputSchema.safeParse({ name: readField(formData, "name") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("class").update({ name: parsed.data.name }).eq("id", id).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.class.updated", id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
 export async function deleteClassAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
   return deleteRow("class", id, "master_data.class.deleted");
 }
@@ -191,6 +237,23 @@ export async function createSectionAction(_prevState: MasterDataFormState, formD
   return {};
 }
 
+export async function updateSectionAction(id: string, _prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = namedEntityInputSchema.safeParse({ name: readField(formData, "name") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("section").update({ name: parsed.data.name }).eq("id", id).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.section.updated", id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
 export async function deleteSectionAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
   return deleteRow("section", id, "master_data.section.deleted");
 }
@@ -216,6 +279,27 @@ export async function createSubjectAction(_prevState: MasterDataFormState, formD
   if (error || !data) return { error: error?.message ?? "Could not create subject." };
 
   await writeAuditLog(session.schoolId, session.authUserId, "master_data.subject.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function updateSubjectAction(id: string, _prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = subjectInputSchema.safeParse({ name: readField(formData, "name"), code: readField(formData, "code") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("subject")
+    .update({ name: parsed.data.name, code: parsed.data.code || null })
+    .eq("id", id)
+    .eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.subject.updated", id);
   revalidatePath(PAGE_PATH);
   return {};
 }
@@ -288,8 +372,33 @@ async function createNamedRow(
   return {};
 }
 
+async function updateNamedRow(
+  table: "department" | "designation" | "house",
+  id: string,
+  action: string,
+  formData: FormData,
+): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = namedEntityInputSchema.safeParse({ name: readField(formData, "name") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from(table).update({ name: parsed.data.name }).eq("id", id).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, action, id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
 export async function createDepartmentAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
   return createNamedRow("department", "master_data.department.created", formData);
+}
+export async function updateDepartmentAction(id: string, _prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  return updateNamedRow("department", id, "master_data.department.updated", formData);
 }
 export async function deleteDepartmentAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
   return deleteRow("department", id, "master_data.department.deleted");
@@ -298,12 +407,18 @@ export async function deleteDepartmentAction(id: string, _prevState: MasterDataF
 export async function createDesignationAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
   return createNamedRow("designation", "master_data.designation.created", formData);
 }
+export async function updateDesignationAction(id: string, _prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  return updateNamedRow("designation", id, "master_data.designation.updated", formData);
+}
 export async function deleteDesignationAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
   return deleteRow("designation", id, "master_data.designation.deleted");
 }
 
 export async function createHouseAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
   return createNamedRow("house", "master_data.house.created", formData);
+}
+export async function updateHouseAction(id: string, _prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  return updateNamedRow("house", id, "master_data.house.updated", formData);
 }
 export async function deleteHouseAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
   return deleteRow("house", id, "master_data.house.deleted");
@@ -333,6 +448,29 @@ export async function createStudentCategoryAction(_prevState: MasterDataFormStat
   if (error || !data) return { error: error?.message ?? "Could not create category." };
 
   await writeAuditLog(session.schoolId, session.authUserId, "master_data.student_category.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function updateStudentCategoryAction(
+  id: string,
+  _prevState: MasterDataFormState,
+  formData: FormData,
+): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  // Label only -- key is the stable identifier other rows/imports reference (e.g. a category_key
+  // column on an import row), so it's intentionally not editable here.
+  const label = readField(formData, "label").trim();
+  if (!label) return { error: "Label is required" };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("student_category").update({ label }).eq("id", id).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.student_category.updated", id);
   revalidatePath(PAGE_PATH);
   return {};
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useFormState, useFormStatus } from "react-dom";
 import type { MasterDataFormState } from "../actions";
 
@@ -12,17 +13,19 @@ function SubmitButton() {
       type="submit"
       disabled={pending}
       aria-label="Delete"
-      className="rounded-md px-2 py-1 text-xs text-danger-solid hover:bg-danger disabled:opacity-60"
+      className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:text-danger-solid hover:bg-danger disabled:opacity-60"
     >
-      Delete
+      <Trash2 className="h-4 w-4" aria-hidden="true" />
     </button>
   );
 }
 
 /**
- * Every master-data delete action shares the (id, prevState, formData) => State shape (see
- * lib/master-data/actions.ts's deleteRow) -- one row-scoped button component, bound to whichever
- * action the caller passes, instead of one near-identical component per entity.
+ * docs/design-system.md > Forms > Inline-editable tables: one inline delete icon, not the
+ * row-actions overflow menu -- a master-data row only ever has one possible action, so a menu
+ * would add a click for no reason. Every master-data delete action shares the
+ * (id, prevState, formData) => State shape (see lib/master-data/actions.ts's deleteRow) -- one
+ * row-scoped button component, bound to whichever action the caller passes.
  */
 export function DeleteRowButton({
   action,

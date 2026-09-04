@@ -1,9 +1,10 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { createClassAction, deleteClassAction, type MasterDataFormState } from "../actions";
+import { createClassAction, deleteClassAction, updateClassAction, type MasterDataFormState } from "../actions";
 import type { ClassRow } from "../types";
 import { DeleteRowButton } from "./DeleteRowButton";
+import { EditableText } from "./EditableText";
 
 const initialState: MasterDataFormState = {};
 
@@ -24,7 +25,7 @@ export function ClassesSection({ classes }: { classes: ClassRow[] }) {
   const [state, formAction] = useFormState(createClassAction, initialState);
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-border p-4">
+    <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 shadow-sm">
       <div>
         <h2 className="text-lg font-semibold">2. Classes</h2>
         <p className="text-sm text-muted-foreground">
@@ -35,8 +36,8 @@ export function ClassesSection({ classes }: { classes: ClassRow[] }) {
       {classes.length > 0 ? (
         <ul className="flex flex-wrap gap-2">
           {classes.map((c) => (
-            <li key={c.id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-sm">
-              <span>{c.name}</span>
+            <li key={c.id} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm">
+              <EditableText id={c.id} value={c.name} fieldName="name" updateAction={updateClassAction} />
               <DeleteRowButton action={deleteClassAction.bind(null, c.id)} />
             </li>
           ))}

@@ -4,6 +4,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import type { MasterDataFormState } from "../actions";
 import type { NamedRow } from "../types";
 import { DeleteRowButton } from "./DeleteRowButton";
+import { EditableText } from "./EditableText";
 
 const initialState: MasterDataFormState = {};
 
@@ -22,32 +23,34 @@ function AddButton() {
 
 /**
  * Department, designation, and house are all bare (school_id, name) rows with identical
- * add/delete behaviour -- one list component parameterised by title/action, not three
+ * add/edit/delete behaviour -- one list component parameterised by title/actions, not three
  * near-identical ones.
  */
 export function NamedListSection({
   title,
   rows,
   createAction,
+  updateAction,
   deleteAction,
   placeholder,
 }: {
   title: string;
   rows: NamedRow[];
   createAction: (prevState: MasterDataFormState, formData: FormData) => Promise<MasterDataFormState>;
+  updateAction: (id: string, prevState: MasterDataFormState, formData: FormData) => Promise<MasterDataFormState>;
   deleteAction: (id: string) => (prevState: MasterDataFormState, formData: FormData) => Promise<MasterDataFormState>;
   placeholder: string;
 }) {
   const [state, formAction] = useFormState(createAction, initialState);
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-4">
-      <h3 className="font-medium">{title}</h3>
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-4 shadow-sm">
+      <h3 className="text-lg font-semibold">{title}</h3>
       {rows.length > 0 ? (
         <ul className="divide-y divide-border">
           {rows.map((row) => (
-            <li key={row.id} className="flex items-center justify-between py-1.5 text-sm">
-              <span>{row.name}</span>
+            <li key={row.id} className="flex items-center justify-between py-1 text-sm">
+              <EditableText id={row.id} value={row.name} fieldName="name" updateAction={updateAction} />
               <DeleteRowButton action={deleteAction(row.id)} />
             </li>
           ))}
