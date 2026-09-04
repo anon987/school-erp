@@ -186,6 +186,33 @@ Raw device events land in `biometric_event`. A separate job reconciles them into
 
 ---
 
+## 6a. Backup and restore
+
+This is an ops task, not a build ticket (`docs/schoolerp_features.md` §U requires it; the go-live checklist in `docs/schoolerp_launchplan.md` §5 gates on "Backup and restore tested against real data volume"). No code exists for this and none is planned — it's documented here so whoever runs the actual restore test knows what they're touching. **Verify every retention number and plan-tier detail below against the live Supabase project settings before relying on it** — these are Supabase platform mechanics, not something this codebase controls, and Supabase's plan terms change independently of this doc.
+
+**The mechanism:** Supabase manages Postgres backups for hosted projects.
+- Free tier has no meaningful backup guarantee — not viable for a paying customer's production data regardless of what's configured in the app.
+- Pro tier and above includes daily automated backups with a retention window (commonly 7 days on Pro; longer on higher tiers) — a fixed daily snapshot, not an arbitrary point in time.
+- Point-in-time recovery (PITR) is a separate, usually paid, add-on on Pro+ — it replays the WAL to restore to *any* timestamp within its own retention window (commonly offered at 7/14/28-day tiers), not just the daily snapshot points. If school-day-granularity recovery matters (it does — a bad import commit or a fat-fingered bulk delete at 11am shouldn't cost the whole day), PITR is very deliberately what's paid for, not the plain daily-backup tier.
+
+**What a restore covers:**
+- Everything living in the Postgres database: every table in `public`, RLS policies, and Supabase's own `auth` schema (so `auth.users` comes back too) — restoring the DB restores auth along with app data, since they're the same Postgres instance.
+- Schema/migrations themselves are already versioned in git (`packages/db/supabase/migrations/`) independently of any data backup — that's a different, already-solved kind of "backup."
+
+**What it does NOT cover — the part most likely to surprise someone at go-live:**
+- **Supabase Storage (uploaded files) is a separate system from Postgres and is not included in a database backup or PITR.** This product stores student documents, TC/ID proofs, and staff qualification documents in Storage (`docs/schoolerp_techstack.md` §6, "Private buckets"). A database restore brings back the *rows referencing* those files, not the files themselves. If Storage has no separate backup/versioning strategy, a bucket-level accident is unrecoverable regardless of how good the database restore is. This needs an explicit decision (Storage bucket versioning, a periodic export job, or an accepted risk) — it is not covered by anything described elsewhere in this doc.
+- **A restore is a whole-project operation, not a per-table or per-school one.** Because every school shares one Postgres instance (rule 1, `CLAUDE.md`), restoring to fix one school's incident rolls back every other school's data on this instance to the same timestamp too. There is no "restore just School X" lever. This means: full restore is the last resort for catastrophic corruption/loss, not the tool for routine mistakes — routine mistakes (a bad import commit, an accidental bulk edit) should go through the app's own reversal mechanisms (e.g. the import batch revert function, `audit_log`-informed manual correction) precisely because those are school-scoped and a full restore is not. At single-pilot scale this is an accepted limitation; it does not survive multiple schools sharing an instance, so **per-school logical export/restore is tracked as a `P5` requirement** (`docs/schoolerp_launchplan.md` §"P5 — Productization"), not an optional nicety.
+
+**What "tested against real data volume" should actually mean** — concrete steps for whoever runs this test, not a build task for this codebase:
+1. Trigger a restore (from a daily backup or a PITR point) into a **separate/staging** Supabase project — never test a restore by restoring over the production project.
+2. Time it. At pilot volume (~2,200 students plus guardians/staff/documents rows) the restore duration is the real recovery-time number to put in front of the school, not a guess.
+3. Verify row counts on key tables against a pre-restore snapshot count (student, staff, student_guardian, import_batch, audit_log at minimum).
+4. Spot-check specific known records end-to-end (a specific student's guardian links, a staff member's department/designation) rather than trusting counts alone.
+5. Confirm RLS policies are present and enforcing on the restored project (a restore that silently drops or disables a policy is worse than no restore).
+6. Confirm explicitly that Storage files are, or are not, part of what just came back — and treat that answer as informing the Storage decision above, not as a surprise to discover during a real incident.
+
+---
+
 ## 7. Environment variables
 
 ```

@@ -67,6 +67,7 @@ Phase tags: `P0` foundation · `P1` core MVP · `P2` academic + parent · `P3` o
   - **Status colours are not themeable.** Present/absent/late, paid/due/overdue, approved/pending carry meaning and stay consistent across every school.
 - Academics: academic years with open/closed state
 - Classes, sections, subjects, streams, houses, student categories
+  - **Stream is not a first-class table** — there is no `stream` entity in the schema. The assumption is that a stream is just a differently-named `class` row (e.g. "XI Science", "XI Commerce"), each with its own sections, subject set, and eventually its own timetable — practical because those are exactly the dimensions a stream actually varies along. **Breaking condition:** if a school's classes 11/12 do NOT split cleanly into separate streams — i.e. a single class contains mixed-stream students — this workaround fails, since a class/section can't represent two different subject sets at once. First-class `stream` (touching class, section, subject, and later timetable) would then be needed before Exams. Confirmed via the pilot's Stage 1 discovery (`docs/schoolerp_launchplan.md` §4) before assuming this holds generally.
 - Grading scales and grade boundary rules (configurable per school)
 - Fee heads and fee structures
 - Holiday calendar

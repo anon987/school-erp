@@ -87,6 +87,7 @@ These are working estimates for focused solo development. Add buffer for client 
 - Management dashboard: strength, attendance, collection, dues, alerts, trends
 - Baseline report pack with PDF/Excel export
 - Audit log surfaced in UI
+- Login history and password policy/session expiry (`docs/schoolerp_features.md` §U, tagged P0/P1 but not yet built — sign-in does not currently write a login-history record, and there is no configurable password policy or session expiry anywhere in the codebase). Small scope, not a pilot-onboarding blocker like the three above — folded in here rather than tracked separately so it doesn't slip unnoticed.
 
 **Exit criteria:** every item in the MVP acceptance checklist in `schoolerp_features.md` §7 passes.
 
@@ -132,6 +133,7 @@ Payroll · accounts and expenses · library · transport · hostel · inventory 
 - Support console with audited impersonation
 - Usage analytics, onboarding automation
 - Knowledge base and in-app help
+- Per-school logical export/restore. Standard Postgres/PITR restore is whole-project — every school on the instance rolls back together (see `docs/schoolerp_techstack.md` §6a). At single-pilot scale that's an accepted operational limitation, but it does not survive multiple schools sharing an instance: one school's data incident cannot require rolling back every other school's data. Requirement, not a nicety, once there's more than one paying school.
 
 ---
 
@@ -147,6 +149,7 @@ Collect from the school:
 - Existing receipt format and serial numbering convention
 - Report card samples and grading rules
 - Class and section structure, subject allocation
+- **Do classes 11 and 12 split cleanly into separate streams (Science/Commerce/Arts), or does a single class contain mixed-stream students?** This decides whether "stream" can stay a naming convention on `class` (e.g. "XI Science") — see `docs/schoolerp_features.md` §A — or needs to become a first-class concept before Exams. Ask explicitly; don't assume clean splitting.
 - Staff list with roles and which classes they teach
 - Parent contact data quality — **check this early**, it determines whether `P2` messaging is viable
 - Biometric device model, if already purchased
@@ -198,6 +201,7 @@ The school keeps their registers running alongside the system. Reconcile weekly.
 - [ ] All staff accounts created with correct roles
 - [ ] Training delivered, quick guides handed over
 - [ ] Backup and restore tested against real data volume
+- [ ] Storage files (student/staff documents and photos) have their own backup path — a Postgres backup/PITR does not cover Supabase Storage (see `docs/schoolerp_techstack.md` §6a)
 - [ ] Support channel live with a documented response commitment
 - [ ] Parallel run schedule agreed in writing
 
