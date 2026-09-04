@@ -1,3 +1,4 @@
+import { CheckCircle2, XCircle, AlertTriangle, Circle, type LucideIcon } from "lucide-react";
 import { cn } from "./cn";
 
 /**
@@ -10,15 +11,18 @@ export type StatusState = "present" | "absent" | "late" | "paid" | "due" | "over
 
 type Semantic = "success" | "danger" | "warning" | "info";
 
-const STATUS_SEMANTIC: Record<StatusState, { semantic: Semantic; glyph: string }> = {
-  present: { semantic: "success", glyph: "✓" },
-  paid: { semantic: "success", glyph: "✓" },
-  approved: { semantic: "success", glyph: "✓" },
-  absent: { semantic: "danger", glyph: "✕" },
-  overdue: { semantic: "danger", glyph: "!" },
-  late: { semantic: "warning", glyph: "!" },
-  due: { semantic: "info", glyph: "●" },
-  pending: { semantic: "info", glyph: "●" },
+// lucide-react, 14px (h-3.5 w-3.5) -- see docs/design-system.md Foundations > Icons. Replaces
+// the Unicode glyphs (✓ ✕ ! ●) this component used as a stopgap before there was a real icon
+// system in the product.
+const STATUS_SEMANTIC: Record<StatusState, { semantic: Semantic; Icon: LucideIcon }> = {
+  present: { semantic: "success", Icon: CheckCircle2 },
+  paid: { semantic: "success", Icon: CheckCircle2 },
+  approved: { semantic: "success", Icon: CheckCircle2 },
+  absent: { semantic: "danger", Icon: XCircle },
+  overdue: { semantic: "danger", Icon: AlertTriangle },
+  late: { semantic: "warning", Icon: AlertTriangle },
+  due: { semantic: "info", Icon: Circle },
+  pending: { semantic: "info", Icon: Circle },
 };
 
 const SEMANTIC_CLASSES: Record<Semantic, string> = {
@@ -48,7 +52,7 @@ export function StatusBadge({ state, label, className }: StatusBadgeProps) {
         className,
       )}
     >
-      <span aria-hidden="true">{config.glyph}</span>
+      <config.Icon aria-hidden="true" className="h-3.5 w-3.5" />
       <span>{label}</span>
     </span>
   );

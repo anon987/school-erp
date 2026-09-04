@@ -2,6 +2,7 @@ import { deriveBrandTokens } from "@schoolerp/ui";
 import { requireSession } from "@/lib/core/auth/requireSession";
 import { getPermissions } from "@/lib/core/auth/permissions";
 import { getSchoolBranding } from "@/lib/core/school/getSchoolBranding";
+import { getCurrentAcademicYearName } from "@/lib/core/school/getCurrentAcademicYear";
 import { DASHBOARD_ITEM, getVisibleNavGroups } from "@/lib/core/nav";
 import { t } from "@/lib/core/i18n";
 import { ThemeToggle } from "@/lib/core/theme/ThemeToggle";
@@ -25,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await requireSession();
   const permissions = await getPermissions();
   const branding = session.schoolId ? await getSchoolBranding(session.schoolId) : null;
+  const academicYearName = session.schoolId ? await getCurrentAcademicYearName(session.schoolId) : null;
 
   const visibleGroups = getVisibleNavGroups(permissions);
 
@@ -68,6 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <img src={branding.logoUrl} alt="" className="h-7 w-7 rounded object-contain" />
             ) : null}
             <span className="text-sm font-medium">{branding?.displayName ?? "School ERP"}</span>
+            {academicYearName ? <span className="text-sm text-muted-foreground">· {academicYearName}</span> : null}
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />

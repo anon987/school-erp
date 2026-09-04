@@ -1,8 +1,21 @@
+import {
+  LayoutDashboard,
+  GraduationCap,
+  Users,
+  School,
+  Settings2,
+  Palette,
+  UserCog,
+  History,
+  type LucideIcon,
+} from "lucide-react";
 import type { TranslationKey } from "./i18n";
 
 export interface NavItem {
   labelKey: TranslationKey;
   href: string;
+  /** docs/design-system.md > Navigation: every nav item gets a leading icon, no exceptions. */
+  icon: LucideIcon;
   /** Omit for items every signed-in member sees regardless of role. */
   permission?: string;
 }
@@ -35,8 +48,12 @@ export interface NavGroup {
  * labelKey, not a literal string: Hindi is a P2 requirement (CLAUDE.md), so nav labels go
  * through the same translation lookup as everything else from day one instead of being
  * retrofitted later.
+ *
+ * Icons are plain component references (lucide-react), not JSX -- safe to import into this
+ * server-shared data file since nothing here renders; SidebarNav (Client Component) is what
+ * actually invokes them.
  */
-export const DASHBOARD_ITEM: NavItem = { labelKey: "nav.dashboard", href: "/dashboard" };
+export const DASHBOARD_ITEM: NavItem = { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard };
 
 export const NAV_GROUPS: NavGroup[] = [
   // academics/: Attendance (§E), Exams (§G), Timetable (§I, P2), Homework (§J, P2).
@@ -50,18 +67,18 @@ export const NAV_GROUPS: NavGroup[] = [
     // hide it from teachers/accountants who should still be able to browse.
     labelKey: "nav.group.people",
     items: [
-      { labelKey: "nav.students", href: "/people/students" },
-      { labelKey: "nav.staff", href: "/people/staff" },
+      { labelKey: "nav.students", href: "/people/students", icon: GraduationCap },
+      { labelKey: "nav.staff", href: "/people/staff", icon: Users },
     ],
   },
   {
     labelKey: "nav.group.settings",
     items: [
-      { labelKey: "nav.school_profile", href: "/settings/school", permission: "school.manage_profile" },
-      { labelKey: "nav.master_data", href: "/settings/master-data", permission: "school.manage_master_data" },
-      { labelKey: "nav.branding", href: "/settings/branding", permission: "school.manage_branding" },
-      { labelKey: "nav.members", href: "/settings/members", permission: "school.manage_members" },
-      { labelKey: "nav.audit_log", href: "/settings/audit-log", permission: "school.view_audit_log" },
+      { labelKey: "nav.school_profile", href: "/settings/school", icon: School, permission: "school.manage_profile" },
+      { labelKey: "nav.master_data", href: "/settings/master-data", icon: Settings2, permission: "school.manage_master_data" },
+      { labelKey: "nav.branding", href: "/settings/branding", icon: Palette, permission: "school.manage_branding" },
+      { labelKey: "nav.members", href: "/settings/members", icon: UserCog, permission: "school.manage_members" },
+      { labelKey: "nav.audit_log", href: "/settings/audit-log", icon: History, permission: "school.view_audit_log" },
     ],
   },
 ];
