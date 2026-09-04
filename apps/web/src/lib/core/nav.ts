@@ -44,12 +44,15 @@ export const NAV_GROUPS: NavGroup[] = [
   // operations/: Transport/Library/Hostel/Inventory (§P/Q/R/S, P3).
   // communication/: Communication (§K, P2).
   {
-    // No permission on this: the directory is broad-read/gated-write (RLS already scopes
-    // reads to the caller's school; only creating/editing needs manage_students) -- matching
-    // that here, not gating the nav link itself behind the write permission, which would hide
-    // it from teachers/accountants who should still be able to browse.
+    // No permission on these: the directories are broad-read/gated-write (RLS already scopes
+    // reads to the caller's school; only creating/editing needs manage_students/manage_staff) --
+    // matching that here, not gating the nav link itself behind the write permission, which would
+    // hide it from teachers/accountants who should still be able to browse.
     labelKey: "nav.group.people",
-    items: [{ labelKey: "nav.students", href: "/people/students" }],
+    items: [
+      { labelKey: "nav.students", href: "/people/students" },
+      { labelKey: "nav.staff", href: "/people/staff" },
+    ],
   },
   {
     labelKey: "nav.group.settings",
