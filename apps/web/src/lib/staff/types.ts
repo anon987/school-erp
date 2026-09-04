@@ -50,9 +50,13 @@ export interface StaffFormOptions {
   designations: DesignationOption[];
 }
 
+export type StaffSortKey = "employeeCode" | "name";
+
 export interface StaffDirectoryFilters {
   search?: string | undefined;
   departmentId?: string | undefined;
+  sort?: StaffSortKey | undefined;
+  dir?: "asc" | "desc" | undefined;
 }
 
 export interface StaffDirectoryPage {

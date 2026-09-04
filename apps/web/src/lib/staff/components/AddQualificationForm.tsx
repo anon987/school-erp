@@ -25,20 +25,22 @@ export function AddQualificationForm({ staffId }: { staffId: string }) {
     <form action={formAction} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="staffId" value={staffId} />
       <div className="flex flex-col gap-1">
-        <label htmlFor="degree" className="text-sm font-medium">
+        <label htmlFor="degree" className="text-xs font-medium text-muted-foreground">
           Degree
         </label>
         <input id="degree" name="degree" required className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="institution" className="text-sm font-medium">
+        <label htmlFor="institution" className="text-xs font-medium text-muted-foreground">
           Institution
+          <span className="font-normal normal-case"> (optional)</span>
         </label>
         <input id="institution" name="institution" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="yearCompleted" className="text-sm font-medium">
+        <label htmlFor="yearCompleted" className="text-xs font-medium text-muted-foreground">
           Year
+          <span className="font-normal normal-case"> (optional)</span>
         </label>
         <input
           id="yearCompleted"

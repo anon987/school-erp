@@ -62,9 +62,15 @@ export async function listStaff(
     }
   }
 
+  const ascending = filters.dir !== "desc";
+  if (filters.sort === "employeeCode") {
+    query = query.order("employee_code", { ascending });
+  } else {
+    query = query.order("last_name", { ascending }).order("first_name", { ascending });
+  }
+
   const from = page * pageSize;
   const { data, error, count } = await query
-    .order("last_name", { ascending: true })
     .order("id", { ascending: true })
     .range(from, from + pageSize - 1)
     .returns<StaffDirectoryRow[]>();

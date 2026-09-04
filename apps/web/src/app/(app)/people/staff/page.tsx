@@ -1,16 +1,22 @@
 import Link from "next/link";
-import { StatusBadge, type StatusState } from "@schoolerp/ui";
+import { Plus, Upload, Users, SearchX } from "lucide-react";
+import { StatusBadge } from "@schoolerp/ui";
 import { requireSession } from "@/lib/core/auth/requireSession";
 import { getPermissions } from "@/lib/core/auth/permissions";
 import { listStaff, getStaffFormOptions } from "@/lib/staff/queries";
+import type { StaffSortKey } from "@/lib/staff/types";
+import { staffStatusBadgeState } from "@/lib/staff/statusBadge";
 import { Pagination } from "@/components/Pagination";
+import { StaffFilterBar } from "@/lib/staff/components/StaffFilterBar";
+import { RowActionsMenu } from "@/components/RowActionsMenu";
+import { TwoLineCell } from "@/components/TwoLineCell";
+import { EmptyState } from "@/components/EmptyState";
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 
-const EMPLOYMENT_STATUS_BADGE: Record<string, StatusState> = {
-  active: "approved",
-  inactive: "absent",
-};
+function isSortKey(value: string): value is StaffSortKey {
+  return value === "employeeCode" || value === "name";
+}
 
 export default async function StaffDirectoryPage({
   searchParams,
@@ -25,9 +31,13 @@ export default async function StaffDirectoryPage({
   const page = Number(params.page ?? "0") || 0;
   const search = params.search ?? "";
   const departmentId = params.departmentId ?? "";
+  const sort = params.sort && isSortKey(params.sort) ? params.sort : "";
+  const dir = params.dir === "desc" ? "desc" : "asc";
+  const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE;
+  const hasActiveFilters = Boolean(search || departmentId);
 
   const [directory, options] = await Promise.all([
-    listStaff(session.schoolId!, { search, departmentId: departmentId || undefined }, page, PAGE_SIZE),
+    listStaff(session.schoolId!, { search, departmentId: departmentId || undefined, sort: sort || undefined, dir }, page, pageSize),
     getStaffFormOptions(session.schoolId!),
   ]);
 
@@ -35,6 +45,9 @@ export default async function StaffDirectoryPage({
     const qs = new URLSearchParams();
     if (search) qs.set("search", search);
     if (departmentId) qs.set("departmentId", departmentId);
+    if (sort) qs.set("sort", sort);
+    if (dir !== "asc") qs.set("dir", dir);
+    if (pageSize !== DEFAULT_PAGE_SIZE) qs.set("pageSize", String(pageSize));
     qs.set("page", String(nextPage));
     return `/people/staff?${qs.toString()}`;
   }
@@ -45,99 +58,79 @@ export default async function StaffDirectoryPage({
         <h1 className="text-2xl font-semibold">Staff</h1>
         {canManage ? (
           <div className="flex gap-2">
-            <Link href="/people/staff/import" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary">
+            <Link
+              href="/people/staff/import"
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
+            >
+              <Upload className="h-4 w-4" aria-hidden="true" />
               Import
             </Link>
             <Link
               href="/people/staff/new"
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
+              <Plus className="h-4 w-4" aria-hidden="true" />
               New staff record
             </Link>
           </div>
         ) : null}
       </div>
 
-      <form method="get" className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-card p-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="search" className="text-sm font-medium">
-            Search
-          </label>
-          <input
-            id="search"
-            name="search"
-            defaultValue={search}
-            placeholder="Name or employee code"
-            className="rounded-md border border-input bg-background px-3 py-2 text-base"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="departmentId" className="text-sm font-medium">
-            Department
-          </label>
-          <select
-            id="departmentId"
-            name="departmentId"
-            defaultValue={departmentId}
-            className="rounded-md border border-input bg-background px-3 py-2 text-base"
-          >
-            <option value="">All departments</option>
-            {options.departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button type="submit" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary">
-          Filter
-        </button>
-      </form>
-
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-secondary text-left text-secondary-foreground">
-              <th className="px-3 py-2 font-medium">Employee #</th>
-              <th className="px-3 py-2 font-medium">Name</th>
-              <th className="px-3 py-2 font-medium">Department</th>
-              <th className="px-3 py-2 font-medium">Designation</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {directory.items.map((staff) => (
-              <tr key={staff.id} className="border-b border-border last:border-0 hover:bg-secondary/50">
-                <td className="px-3 py-2">
-                  <Link href={`/people/staff/${staff.id}`} className="font-figures underline-offset-2 hover:underline">
-                    {staff.employeeCode}
-                  </Link>
-                </td>
-                <td className="px-3 py-2">
-                  {staff.firstName} {staff.lastName}
-                </td>
-                <td className="px-3 py-2">{staff.departmentName ?? "—"}</td>
-                <td className="px-3 py-2">{staff.designationName ?? "—"}</td>
-                <td className="px-3 py-2">
-                  <StatusBadge
-                    state={EMPLOYMENT_STATUS_BADGE[staff.employmentStatus] ?? "pending"}
-                    label={staff.employmentStatus}
-                  />
-                </td>
-              </tr>
-            ))}
-            {directory.items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                  No staff match these filters.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-
-      <Pagination page={directory.page} pageSize={directory.pageSize} total={directory.total} hrefFor={hrefFor} />
+      <StaffFilterBar
+        departments={options.departments}
+        params={{ search, departmentId, sort, dir, pageSize }}
+        pagination={<Pagination page={directory.page} pageSize={directory.pageSize} total={directory.total} hrefFor={hrefFor} />}
+      >
+        {directory.items.map((staff) => (
+          <tr key={staff.id} className="border-b border-border last:border-0 hover:bg-secondary/50">
+            <td className="px-3 py-1.5">
+              <Link href={`/people/staff/${staff.id}`} className="font-figures font-medium underline-offset-2 hover:underline">
+                {staff.employeeCode}
+              </Link>
+            </td>
+            <td className="px-3 py-1.5 font-medium">
+              {staff.firstName} {staff.lastName}
+            </td>
+            <td className="px-3 py-1.5">
+              <TwoLineCell primary={staff.departmentName ?? "—"} secondary={staff.designationName} />
+            </td>
+            <td className="px-3 py-1.5">
+              {staffStatusBadgeState(staff.employmentStatus) ? (
+                <StatusBadge state={staffStatusBadgeState(staff.employmentStatus)!} label={staff.employmentStatus} />
+              ) : null}
+            </td>
+            <td className="px-3 py-1.5 text-right">
+              <RowActionsMenu
+                actions={[
+                  { label: "View", href: `/people/staff/${staff.id}` },
+                  ...(canManage ? [{ label: "Edit", href: `/people/staff/${staff.id}/edit` }] : []),
+                ]}
+              />
+            </td>
+          </tr>
+        ))}
+        {directory.items.length === 0 ? (
+          <tr>
+            <td colSpan={5}>
+              {hasActiveFilters ? (
+                <EmptyState
+                  icon={SearchX}
+                  title="No staff match these filters"
+                  description="Try a different search term, or clear the filters."
+                  action={{ label: "Clear filters", href: "/people/staff" }}
+                />
+              ) : (
+                <EmptyState
+                  icon={Users}
+                  title="No staff yet"
+                  description="Import the school's existing staff records to get started."
+                  action={canManage ? { label: "Import staff", href: "/people/staff/import" } : undefined}
+                />
+              )}
+            </td>
+          </tr>
+        ) : null}
+      </StaffFilterBar>
     </div>
   );
 }
