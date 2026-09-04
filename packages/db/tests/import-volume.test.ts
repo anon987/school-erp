@@ -32,6 +32,30 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+/**
+ * Both fn_validate_import_batch and fn_commit_import_batch are chunked (see
+ * import_validate_chunking / import_commit_chunking migrations) -- each call processes up to
+ * p_limit rows and reports {remaining, done}, because a single call over the whole batch can
+ * hit the API role's statement timeout at real volume. This loops until done, same as the
+ * client-side code in lib/core/import/actions.ts would.
+ */
+async function runChunkedRpc(
+  client: SupabaseClient,
+  fnName: string,
+  args: Record<string, unknown>,
+): Promise<{ error: unknown; chunkCalls: number }> {
+  let done = false;
+  let chunkCalls = 0;
+  while (!done) {
+    chunkCalls += 1;
+    if (chunkCalls > 30) return { error: new Error(`${fnName} did not finish within 30 chunk calls`), chunkCalls };
+    const { data, error } = await client.rpc(fnName, args);
+    if (error) return { error, chunkCalls };
+    done = (data as unknown as { done: boolean }).done;
+  }
+  return { error: null, chunkCalls };
+}
+
 interface BatchCounts {
   status: string;
   total_rows: number;
@@ -99,10 +123,13 @@ describe("import pipeline at realistic volume (~2,000 students)", () => {
       console.log(`[volume] staged ${STUDENT_COUNT} rows in ${chunks.length} chunks: ${stageMs}ms`);
 
       const validateStart = Date.now();
-      const { error: validateError } = await client.rpc("fn_validate_import_batch", { p_batch_id: batchId });
+      const { error: validateError, chunkCalls: validateChunks } = await runChunkedRpc(client, "fn_validate_import_batch", {
+        p_batch_id: batchId,
+        p_limit: 300,
+      });
       const validateMs = Date.now() - validateStart;
       expect(validateError).toBeNull();
-      console.log(`[volume] validated ${STUDENT_COUNT} rows: ${validateMs}ms`);
+      console.log(`[volume] validated ${STUDENT_COUNT} rows in ${validateChunks} chunk calls: ${validateMs}ms`);
 
       const { data: afterValidate } = await client
         .from("import_batch")
@@ -194,16 +221,19 @@ describe("import pipeline at realistic volume (~2,000 students)", () => {
       const { error: insertError } = await client.from("import_row").insert(rows);
       expect(insertError).toBeNull();
 
-      const { error: validateError } = await client.rpc("fn_validate_import_batch", { p_batch_id: batchId });
+      const { error: validateError } = await runChunkedRpc(client, "fn_validate_import_batch", {
+        p_batch_id: batchId,
+        p_limit: 300,
+      });
       expect(validateError).toBeNull();
 
-      const { data: commitData, error: commitError } = await client.rpc("fn_commit_import_batch", {
+      const { error: commitError } = await runChunkedRpc(client, "fn_commit_import_batch", {
         p_batch_id: batchId,
         p_actor_auth_user_id: authUserId,
         p_limit: 300,
       });
       expect(commitError).toBeNull();
-      expect((commitData as unknown as { done: boolean }).done).toBe(true);
+      // runChunkedRpc only returns without error once done:true -- no separate assertion needed.
 
       const revertStart = Date.now();
       const { data: revertData, error: revertError } = await client.rpc("fn_revert_import_batch", {

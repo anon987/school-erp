@@ -1,0 +1,2 @@
+admission_number,first_name,last_name,dob,gender,blood_group,category_key,house_name,previous_school_name,class_name,section_name,roll_number,guardian1_name,guardian1_relationship,guardian1_phone,guardian1_email,guardian2_name,guardian2_relationship,guardian2_phone,guardian2_email
+,Ravi,Kumar,2012-05-14,male,,general,Ashoka,,9,A,1,Suresh Kumar,father,+919415012345,,Sunita Kumar,mother,+919415012346,
