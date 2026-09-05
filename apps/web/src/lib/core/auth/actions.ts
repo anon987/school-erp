@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { emailPasswordStrategy } from "@schoolerp/integrations";
 import { createSupabaseServerClient } from "@/lib/core/supabase/server";
+import { getSession } from "./session";
 import { t } from "@/lib/core/i18n";
 import { THEME_PREFERENCE_COOKIE, isThemePreference } from "@/lib/core/theme/constants";
 
@@ -58,6 +59,14 @@ export async function signInAction(_prevState: SignInState, formData: FormData):
       const cookieStore = await cookies();
       cookieStore.set(THEME_PREFERENCE_COOKIE, preference, { path: "/", maxAge: 60 * 60 * 24 * 400 });
     }
+  }
+
+  // Successful sign-ins only for now -- see login_history's migration comment for why
+  // failed-attempt tracking is deferred (needs a service-role write path, not this
+  // caller-authenticated one). Best-effort: a write failure here must never block sign-in.
+  const appSession = await getSession();
+  if (appSession) {
+    await supabase.from("login_history").insert({ auth_user_id: appSession.authUserId, school_id: appSession.schoolId ?? null });
   }
 
   redirect("/dashboard");

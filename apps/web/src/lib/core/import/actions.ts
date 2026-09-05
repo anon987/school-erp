@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "../supabase/server";
 import { getSession } from "../auth/session";
 import { requirePermission } from "../auth/permissions";
 import { parseCsv } from "./csv";
+import { importFieldsFor } from "./fields";
 import type { ImportEntityType, ImportMatchMode, RevertOutcome } from "./types";
 
 // Genuinely cross-feature (docs/schoolerp_features.md: Students AND Staff both import) --
@@ -44,7 +45,7 @@ export async function uploadImportAction(
   const isDryRun = formData.get("isDryRun") === "on";
 
   const text = await file.text();
-  const { rows } = parseCsv(text);
+  const { headers, rows } = parseCsv(text);
   if (rows.length === 0) return { error: "The file has no data rows." };
   if (rows.length > MAX_ROWS) {
     return { error: `This file has ${rows.length} rows -- split it into files of ${MAX_ROWS} or fewer.` };
@@ -61,21 +62,27 @@ export async function uploadImportAction(
       file_name: file.name,
       uploaded_by_auth_user_id: session.authUserId,
       is_dry_run: isDryRun,
+      raw_headers: headers,
     })
     .select("id")
     .single();
   if (batchError || !batch) return { error: batchError?.message ?? "Could not create the import batch." };
   const batchId = (batch as unknown as { id: string }).id;
 
-  // Staged in chunks, not one row per round trip -- see packages/db's import_commit_chunking
-  // migration for why this matters at real volume.
+  // Staged with mapped_data = {} -- NOT raw_data -- in chunks, not one row per round trip (same
+  // reason as commit; see import_commit_chunking). Validation does not run here anymore: the
+  // uploaded file's own column headers are not assumed to already match our field keys (that
+  // assumption is exactly what made every real school file fail every row). The batch detail page
+  // shows a column-mapping step first when status is still 'staged'; confirmImportMappingAction
+  // (below) rewrites mapped_data from raw_data using the confirmed mapping and only then runs the
+  // validate loop this function used to run immediately.
   for (let i = 0; i < rows.length; i += STAGE_CHUNK_SIZE) {
     const slice = rows.slice(i, i + STAGE_CHUNK_SIZE);
     const chunk = slice.map((row, idx) => ({
       batch_id: batchId,
       row_number: i + idx + 1,
       raw_data: row,
-      mapped_data: row,
+      mapped_data: {},
     }));
     const { error } = await supabase.from("import_row").insert(chunk);
     if (error) {
@@ -83,9 +90,61 @@ export async function uploadImportAction(
     }
   }
 
-  // Chunked, same reason as commit -- see the import_validate_chunking migration (validation
-  // alone can hit the same statement timeout as commit at real volume; found by re-running the
-  // volume test suite, not by inspection).
+  revalidatePath(redirectBasePath);
+  redirect(`${redirectBasePath}/${batchId}`);
+}
+
+export interface MappingState {
+  error?: string;
+}
+
+/**
+ * Second half of what uploadImportAction used to do in one shot: apply the school-confirmed
+ * column mapping (chunked, via fn_apply_import_column_mapping -- see that function's comment for
+ * why a single UPDATE over the whole batch isn't safe at real volume), then run the same
+ * validate loop uploadImportAction used to run immediately after staging.
+ */
+export async function confirmImportMappingAction(
+  entityType: ImportEntityType,
+  batchId: string,
+  redirectBasePath: string,
+  _prevState: MappingState,
+  formData: FormData,
+): Promise<MappingState> {
+  await requirePermission(permissionFor(entityType));
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const fields = importFieldsFor(entityType);
+  const mapping: Record<string, string> = {};
+  for (const field of fields) {
+    const csvHeader = formData.get(`map_${field.key}`);
+    if (typeof csvHeader === "string" && csvHeader !== "") mapping[field.key] = csvHeader;
+  }
+
+  const missingRequired = fields.filter((f) => f.required && !mapping[f.key]);
+  if (missingRequired.length > 0) {
+    return { error: `Map a column for: ${missingRequired.map((f) => f.label).join(", ")}.` };
+  }
+
+  const supabase = await createSupabaseServerClient();
+
+  let mapped = false;
+  let mapIterations = 0;
+  while (!mapped) {
+    mapIterations += 1;
+    if (mapIterations > 30) {
+      return { error: "Applying the column mapping is taking unexpectedly long -- stopped after 30 chunks." };
+    }
+    const { data, error } = await supabase.rpc("fn_apply_import_column_mapping", {
+      p_batch_id: batchId,
+      p_mapping: mapping,
+      p_limit: COMMIT_CHUNK_SIZE,
+    });
+    if (error) return { error: error.message };
+    mapped = (data as unknown as { done: boolean }).done;
+  }
+
   let validated = false;
   let validateIterations = 0;
   while (!validated) {
@@ -101,7 +160,7 @@ export async function uploadImportAction(
     validated = (data as unknown as { done: boolean }).done;
   }
 
-  revalidatePath(redirectBasePath);
+  revalidatePath(`${redirectBasePath}/${batchId}`);
   redirect(`${redirectBasePath}/${batchId}`);
 }
 

@@ -50,6 +50,39 @@ export interface StaffFormOptions {
   designations: DesignationOption[];
 }
 
+export interface StaffAssignment {
+  id: string;
+  className: string;
+  sectionName: string;
+  subjectName: string;
+}
+
+export interface AssignmentFormOptions {
+  classes: { id: string; name: string }[];
+  sections: { id: string; classId: string; name: string }[];
+  subjects: { id: string; name: string }[];
+}
+
+export interface LeaveType {
+  id: string;
+  name: string;
+  isPaid: boolean;
+}
+
+export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface LeaveRequest {
+  id: string;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  dayCount: number;
+  reason: string | null;
+  status: LeaveStatus;
+  appliedAt: string;
+}
+
 export type StaffSortKey = "employeeCode" | "name";
 
 export interface StaffDirectoryFilters {

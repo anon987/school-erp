@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { Plus, Upload, GraduationCap, SearchX } from "lucide-react";
+import { Plus, Upload, GraduationCap, SearchX, IdCard, FileBarChart } from "lucide-react";
 import { StatusBadge } from "@schoolerp/ui";
 import { requireSession } from "@/lib/core/auth/requireSession";
 import { getPermissions } from "@/lib/core/auth/permissions";
 import { listStudents, getStudentFormOptions } from "@/lib/students/queries";
-import type { StudentSortKey } from "@/lib/students/types";
+import type { StudentFeeStatus, StudentSortKey } from "@/lib/students/types";
 import { Pagination } from "@/components/Pagination";
 import { StudentFilterBar } from "@/lib/students/components/StudentFilterBar";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
@@ -16,6 +16,10 @@ const DEFAULT_PAGE_SIZE = 25;
 
 function isSortKey(value: string): value is StudentSortKey {
   return value === "admissionNumber" || value === "name";
+}
+
+function isFeeStatus(value: string | undefined): value is StudentFeeStatus {
+  return value === "due" || value === "paid" || value === "none";
 }
 
 export default async function StudentsDirectoryPage({
@@ -32,15 +36,16 @@ export default async function StudentsDirectoryPage({
   const search = params.search ?? "";
   const classId = params.classId ?? "";
   const sectionId = params.sectionId ?? "";
+  const feeStatus = isFeeStatus(params.feeStatus) ? params.feeStatus : "";
   const sort = params.sort && isSortKey(params.sort) ? params.sort : "";
   const dir = params.dir === "desc" ? "desc" : "asc";
   const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE;
-  const hasActiveFilters = Boolean(search || classId || sectionId);
+  const hasActiveFilters = Boolean(search || classId || sectionId || feeStatus);
 
   const [directory, options] = await Promise.all([
     listStudents(
       session.schoolId!,
-      { search, classId: classId || undefined, sectionId: sectionId || undefined, sort: sort || undefined, dir },
+      { search, classId: classId || undefined, sectionId: sectionId || undefined, feeStatus: feeStatus || undefined, sort: sort || undefined, dir },
       page,
       pageSize,
     ),
@@ -52,6 +57,7 @@ export default async function StudentsDirectoryPage({
     if (search) qs.set("search", search);
     if (classId) qs.set("classId", classId);
     if (sectionId) qs.set("sectionId", sectionId);
+    if (feeStatus) qs.set("feeStatus", feeStatus);
     if (sort) qs.set("sort", sort);
     if (dir !== "asc") qs.set("dir", dir);
     if (pageSize !== DEFAULT_PAGE_SIZE) qs.set("pageSize", String(pageSize));
@@ -65,6 +71,20 @@ export default async function StudentsDirectoryPage({
         <h1 className="text-2xl font-semibold">Students</h1>
         {canManage ? (
           <div className="flex gap-2">
+            <Link
+              href="/people/students/reports"
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
+            >
+              <FileBarChart className="h-4 w-4" aria-hidden="true" />
+              Reports
+            </Link>
+            <Link
+              href="/people/students/id-cards"
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
+            >
+              <IdCard className="h-4 w-4" aria-hidden="true" />
+              ID Cards
+            </Link>
             <Link
               href="/people/students/import"
               className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
@@ -86,7 +106,7 @@ export default async function StudentsDirectoryPage({
       <StudentFilterBar
         classes={options.classes}
         sections={options.sections}
-        params={{ search, classId, sectionId, sort, dir, pageSize }}
+        params={{ search, classId, sectionId, feeStatus, sort, dir, pageSize }}
         pagination={<Pagination page={directory.page} pageSize={directory.pageSize} total={directory.total} hrefFor={hrefFor} />}
       >
         {directory.items.map((student) => (
@@ -114,6 +134,15 @@ export default async function StudentsDirectoryPage({
                 <StatusBadge state={studentStatusBadgeState(student.status)!} label={student.status} />
               ) : null}
             </td>
+            <td className="px-3 py-1.5">
+              {student.feeStatus === "none" ? (
+                <span className="text-xs text-muted-foreground">No invoices</span>
+              ) : student.feeStatus === "paid" ? (
+                <StatusBadge state="paid" label="Paid" />
+              ) : (
+                <StatusBadge state="due" label={`Due ₹${(student.feeDueAmountPaise / 100).toLocaleString("en-IN")}`} />
+              )}
+            </td>
             <td className="px-3 py-1.5 text-right">
               <RowActionsMenu
                 actions={[
@@ -126,7 +155,7 @@ export default async function StudentsDirectoryPage({
         ))}
         {directory.items.length === 0 ? (
           <tr>
-            <td colSpan={6}>
+            <td colSpan={7}>
               {hasActiveFilters ? (
                 <EmptyState
                   icon={SearchX}

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { LayoutDashboard, GraduationCap, Users, School, Settings2, Palette, UserCog, History } from "lucide-react";
+import { LayoutDashboard, GraduationCap, Users, School, Settings2, Palette, UserCog, History, ClipboardCheck, Wallet, Award, ListChecks, FileBadge2, IdCard, UserPlus, Megaphone, CalendarDays } from "lucide-react";
 import type { TranslationKey } from "./i18n";
 
 export interface NavItem {
@@ -68,7 +68,63 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: "nav.group.people",
     items: [
       { labelKey: "nav.students", href: "/people/students", icon: <GraduationCap className={ICON_CLASS} aria-hidden="true" /> },
+      { labelKey: "nav.admissions", href: "/people/admissions", icon: <UserPlus className={ICON_CLASS} aria-hidden="true" /> },
       { labelKey: "nav.staff", href: "/people/staff", icon: <Users className={ICON_CLASS} aria-hidden="true" /> },
+    ],
+  },
+  {
+    // No permission on the group/item itself -- broad-read like people/ (anyone in the school can
+    // see whether a section's attendance was marked and browse reports; marking/correcting is
+    // gated by the mutation, via attendance.mark_own_class / attendance.manage, not by hiding the
+    // nav link from roles that can still legitimately view it).
+    labelKey: "nav.group.academics",
+    items: [
+      { labelKey: "nav.attendance", href: "/academics/attendance", icon: <ClipboardCheck className={ICON_CLASS} aria-hidden="true" /> },
+      // Points at /my, not the class-timetable builder -- broad-read like attendance above (any
+      // teacher should see their own schedule), whereas the builder itself is manage_timetable-
+      // gated and linked FROM this page for those who hold it, not a separate nav entry (a
+      // teacher without that permission would otherwise get a dead-end "no permission" page).
+      { labelKey: "nav.timetable", href: "/academics/timetable/my", icon: <CalendarDays className={ICON_CLASS} aria-hidden="true" /> },
+      { labelKey: "nav.homework", href: "/academics/homework", icon: <ListChecks className={ICON_CLASS} aria-hidden="true" /> },
+    ],
+  },
+  {
+    // Its own group, not an item under academics/ -- Exams outgrew a single link (setup,
+    // dashboard, admit cards, report cards all need their own page), and this is the same split
+    // Settings already uses for exactly the same reason (one module, several sub-pages behind a
+    // collapsible group), not a new pattern. Report card design (single exam) and combined
+    // report cards (multiple exams, weighted) live on ONE page/nav item -- they were two
+    // similarly-named separate pages at first and users found that confusing, since the second is
+    // just an optional extension of the first, not a distinct concept.
+    labelKey: "nav.group.exams",
+    items: [
+      { labelKey: "nav.exams_dashboard", href: "/academics/exams", icon: <Award className={ICON_CLASS} aria-hidden="true" /> },
+      { labelKey: "nav.exams_manage", href: "/academics/exams/manage", icon: <ListChecks className={ICON_CLASS} aria-hidden="true" /> },
+      { labelKey: "nav.report_cards", href: "/academics/exams/report-cards", icon: <FileBadge2 className={ICON_CLASS} aria-hidden="true" /> },
+      { labelKey: "nav.admit_card_settings", href: "/academics/exams/admit-card-settings", icon: <IdCard className={ICON_CLASS} aria-hidden="true" /> },
+    ],
+  },
+  {
+    // Unlike people/ and academics/, this group IS permission-gated on the item itself --
+    // docs/schoolerp_features.md §1.2, quoted in this file's own header comment: "a teacher
+    // never sees finance." Fee status is money, not a directory a whole staff should browse.
+    labelKey: "nav.group.finance",
+    items: [{ labelKey: "nav.fees", href: "/finance/fees", icon: <Wallet className={ICON_CLASS} aria-hidden="true" />, permission: "school.manage_fees" }],
+  },
+  {
+    // Permission-gated on the item, same reasoning as finance/ above -- composing/sending a
+    // notice to the whole school (or SMS/WhatsApp that cost money) is not a broad-read surface.
+    labelKey: "nav.group.communication",
+    items: [
+      // No permission on Inbox -- broad-read like people/academics above: every signed-in staff
+      // member should see notices addressed to them, whether or not they can compose one.
+      { labelKey: "nav.inbox", href: "/communication/inbox", icon: <Megaphone className={ICON_CLASS} aria-hidden="true" /> },
+      {
+        labelKey: "nav.notices",
+        href: "/communication/notices",
+        icon: <Megaphone className={ICON_CLASS} aria-hidden="true" />,
+        permission: "school.manage_communication",
+      },
     ],
   },
   {

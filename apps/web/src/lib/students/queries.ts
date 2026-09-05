@@ -1,7 +1,9 @@
 import { createSupabaseServerClient } from "@/lib/core/supabase/server";
+import { getCurrentAcademicYearId } from "@/lib/core/school/getCurrentAcademicYear";
 import type {
   CategoryOption,
   ClassOption,
+  ClassStrengthRow,
   GuardianInfo,
   HouseOption,
   SectionOption,
@@ -9,19 +11,26 @@ import type {
   StudentDirectoryFilters,
   StudentDirectoryPage,
   StudentFormOptions,
+  StudentListItem,
+  StudentMasterReportRow,
 } from "./types";
 
 // Shapes for the nested-select queries below -- supabase-js's automatic type inference doesn't
 // reach through embedded/joined selects, so these back the explicit .returns<T>() calls (the
 // supported way to type a query PostgREST can serve but the client can't infer on its own).
-interface StudentDirectoryRow {
+interface StudentListRpcRow {
   id: string;
   admission_number: string;
   first_name: string;
   last_name: string;
   status: string;
   gender: string | null;
-  enrollment: { roll_number: string | null; class: { name: string } | null; section: { name: string } | null }[];
+  class_name: string | null;
+  section_name: string | null;
+  roll_number: string | null;
+  due_amount_paise: number;
+  has_invoices: boolean;
+  total_count: number;
 }
 
 interface StudentDetailRow {
@@ -47,23 +56,28 @@ interface StudentDetailRow {
   }[];
 }
 
-async function getCurrentAcademicYearId(schoolId: string): Promise<string | null> {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("academic_year")
-    .select("id")
-    .eq("school_id", schoolId)
-    .eq("is_current", true)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.id ?? null;
+function toListItem(row: StudentListRpcRow): StudentListItem {
+  return {
+    id: row.id,
+    admissionNumber: row.admission_number,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    status: row.status,
+    gender: row.gender,
+    className: row.class_name,
+    sectionName: row.section_name,
+    rollNumber: row.roll_number,
+    feeStatus: !row.has_invoices ? "none" : row.due_amount_paise > 0 ? "due" : "paid",
+    feeDueAmountPaise: row.due_amount_paise,
+  };
 }
 
-const DIRECTORY_SELECT = `
-  id, admission_number, first_name, last_name, status, gender,
-  enrollment!inner(roll_number, class:class_id(name), section:section_id(name))
-`;
-
+/**
+ * Search/class/section/fee-status filters, sorting, and pagination all happen in one SQL
+ * function (fn_list_students) -- never a `.in()` built from a JS-collected id list (the same
+ * class of bug that crashed Fees Setup on the pilot school's 2,200 students). Fee status is
+ * annotated per row from the same query, not a second per-page round trip.
+ */
 export async function listStudents(
   schoolId: string,
   filters: StudentDirectoryFilters,
@@ -76,56 +90,37 @@ export async function listStudents(
     return { items: [], total: 0, page, pageSize };
   }
 
-  let query = supabase
-    .from("student")
-    .select(DIRECTORY_SELECT, { count: "exact" })
-    .eq("school_id", schoolId)
-    .eq("enrollment.academic_year_id", academicYearId);
+  const rpcArgs = {
+    p_school_id: schoolId,
+    p_academic_year_id: academicYearId,
+    ...(filters.search?.trim() ? { p_search: filters.search.trim() } : {}),
+    ...(filters.classId ? { p_class_id: filters.classId } : {}),
+    ...(filters.sectionId ? { p_section_id: filters.sectionId } : {}),
+    ...(filters.feeStatus ? { p_fee_status: filters.feeStatus } : {}),
+    p_sort: filters.sort === "admissionNumber" ? "admissionNumber" : "name",
+    p_dir: filters.dir === "desc" ? "desc" : "asc",
+    p_limit: pageSize,
+    p_offset: page * pageSize,
+  };
 
-  if (filters.classId) {
-    query = query.eq("enrollment.class_id", filters.classId);
-  }
-  if (filters.sectionId) {
-    query = query.eq("enrollment.section_id", filters.sectionId);
-  }
-  if (filters.search) {
-    const term = filters.search.trim();
-    if (term) {
-      query = query.or(`first_name.ilike.%${term}%,last_name.ilike.%${term}%,admission_number.ilike.%${term}%`);
-    }
-  }
-
-  const ascending = filters.dir !== "desc";
-  if (filters.sort === "admissionNumber") {
-    query = query.order("admission_number", { ascending });
-  } else {
-    query = query.order("last_name", { ascending }).order("first_name", { ascending });
-  }
-
-  const from = page * pageSize;
-  const { data, error, count } = await query
-    .order("id", { ascending: true })
-    .range(from, from + pageSize - 1)
-    .returns<StudentDirectoryRow[]>();
-
+  const { data, error } = await supabase.rpc("fn_list_students", rpcArgs).returns<StudentListRpcRow[]>();
   if (error) throw error;
 
-  const items = (data ?? []).map((row) => {
-    const enrollment = row.enrollment[0];
-    return {
-      id: row.id,
-      admissionNumber: row.admission_number,
-      firstName: row.first_name,
-      lastName: row.last_name,
-      status: row.status,
-      gender: row.gender,
-      className: enrollment?.class?.name ?? null,
-      sectionName: enrollment?.section?.name ?? null,
-      rollNumber: enrollment?.roll_number ?? null,
-    };
-  });
+  if ((data ?? []).length > 0) {
+    return { items: (data ?? []).map(toListItem), total: data![0]!.total_count, page, pageSize };
+  }
 
-  return { items, total: count ?? 0, page, pageSize };
+  // Empty page: could mean zero matches, or the requested page overshot the real total (e.g.
+  // filters just narrowed the result set). Re-check at offset 0 so `total` stays accurate for
+  // the pagination UI instead of reporting 0 when matches actually exist.
+  if (page === 0) {
+    return { items: [], total: 0, page, pageSize };
+  }
+  const { data: firstPage, error: firstPageError } = await supabase
+    .rpc("fn_list_students", { ...rpcArgs, p_offset: 0, p_limit: 1 })
+    .returns<StudentListRpcRow[]>();
+  if (firstPageError) throw firstPageError;
+  return { items: [], total: firstPage?.[0]?.total_count ?? 0, page, pageSize };
 }
 
 export async function getStudent(schoolId: string, studentId: string): Promise<StudentDetail | null> {
@@ -203,4 +198,74 @@ export async function getStudentFormOptions(schoolId: string): Promise<StudentFo
   const categories = (categoriesRes.data ?? []) as unknown as CategoryOption[];
 
   return { classes, sections, houses, categories };
+}
+
+type GuardianRow = { relationship_type: string; phone: string | null; is_primary_contact: boolean; guardian: { first_name: string; last_name: string | null } | null };
+
+/** P1 baseline "student master" report -- every enrolled student for one academic year. */
+export async function getStudentMasterReport(schoolId: string, academicYearId: string): Promise<StudentMasterReportRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("enrollment")
+    .select(
+      "roll_number, class:class_id(name), section:section_id(name), student:student_id!inner(admission_number, first_name, last_name, dob, gender, status, guardians:student_guardian(relationship_type, phone, is_primary_contact, guardian:guardian_id(first_name, last_name)))",
+    )
+    .eq("school_id", schoolId)
+    .eq("academic_year_id", academicYearId)
+    .order("student(first_name)");
+  if (error) throw error;
+
+  const rows = (data ?? []) as unknown as {
+    roll_number: string | null;
+    class: { name: string } | null;
+    section: { name: string } | null;
+    student: { admission_number: string; first_name: string; last_name: string; dob: string | null; gender: string | null; status: string; guardians: GuardianRow[] };
+  }[];
+
+  return rows.map((r) => {
+    const guardians = r.student.guardians ?? [];
+    const father = guardians.find((g) => g.relationship_type === "father");
+    const primary = guardians.find((g) => g.is_primary_contact) ?? father ?? guardians[0];
+    return {
+      admissionNumber: r.student.admission_number,
+      firstName: r.student.first_name,
+      lastName: r.student.last_name,
+      dob: r.student.dob,
+      gender: r.student.gender,
+      className: r.class?.name ?? "",
+      sectionName: r.section?.name ?? "",
+      rollNumber: r.roll_number,
+      status: r.student.status,
+      fatherName: father?.guardian ? `${father.guardian.first_name}${father.guardian.last_name ? ` ${father.guardian.last_name}` : ""}` : null,
+      contactPhone: primary?.phone ?? null,
+    };
+  });
+}
+
+/** P1 baseline "class strength" report -- enrolled headcount per class/section, by gender. */
+export async function getClassStrengthReport(schoolId: string, academicYearId: string): Promise<ClassStrengthRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("enrollment")
+    .select("class:class_id(name, sort_order), section:section_id(name), student:student_id!inner(gender)")
+    .eq("school_id", schoolId)
+    .eq("academic_year_id", academicYearId);
+  if (error) throw error;
+
+  const rows = (data ?? []) as unknown as { class: { name: string; sort_order: number } | null; section: { name: string } | null; student: { gender: string | null } }[];
+
+  const byKey = new Map<string, ClassStrengthRow & { sortOrder: number }>();
+  for (const r of rows) {
+    const key = `${r.class?.name ?? ""}::${r.section?.name ?? ""}`;
+    const existing = byKey.get(key) ?? { className: r.class?.name ?? "", sectionName: r.section?.name ?? "", male: 0, female: 0, other: 0, total: 0, sortOrder: r.class?.sort_order ?? 0 };
+    if (r.student.gender === "male") existing.male += 1;
+    else if (r.student.gender === "female") existing.female += 1;
+    else existing.other += 1;
+    existing.total += 1;
+    byKey.set(key, existing);
+  }
+
+  return Array.from(byKey.values())
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.sectionName.localeCompare(b.sectionName))
+    .map(({ sortOrder: _sortOrder, ...rest }) => rest);
 }

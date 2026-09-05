@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
+import { Download } from "lucide-react";
 import { getImportBatch, getRejectedRows } from "../queries";
 import { CommitButtonForm, RevertButtonForm } from "./BatchActions";
+import { ColumnMappingForm } from "./ColumnMappingForm";
 import type { ImportEntityType } from "../types";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
+import { formatDateTimeDisplayIst } from "@/lib/core/dateIst";
 
 const REVERT_WINDOW_DAYS = 7;
 
@@ -31,8 +34,30 @@ export async function BatchDetailView({
   const batch = await getImportBatch(schoolId, batchId);
   if (!batch) notFound();
 
-  const rejectedRows = batch.rejectedCount > 0 ? await getRejectedRows(batchId) : [];
   const entityType: ImportEntityType = batch.entityType;
+
+  // Mapping hasn't been confirmed yet -- uploadImportAction stages rows and stops here rather
+  // than guessing the file's columns already match our field keys (see that action's comment).
+  // Nothing below this (totals, rejected rows, commit/revert) means anything until mapping runs.
+  if (batch.status === "staged") {
+    return (
+      <div className="flex flex-col gap-6">
+        <Breadcrumbs items={breadcrumbs} />
+        <div>
+          <h1 className="text-2xl font-semibold">{batch.fileName}</h1>
+          <p className="text-sm text-muted-foreground">Uploaded -- confirm the column mapping below to validate.</p>
+        </div>
+        <ColumnMappingForm
+          entityType={entityType}
+          batchId={batch.id}
+          redirectBasePath={redirectBasePath}
+          csvHeaders={batch.rawHeaders ?? []}
+        />
+      </div>
+    );
+  }
+
+  const rejectedRows = batch.rejectedCount > 0 ? await getRejectedRows(batchId) : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,27 +91,43 @@ export async function BatchDetailView({
       </div>
 
       {rejectedRows.length > 0 ? (
-        <section className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-secondary text-left text-secondary-foreground">
-                <th className="px-3 py-2 font-medium">Row</th>
-                <th className="px-3 py-2 font-medium">Reason</th>
-                <th className="px-3 py-2 font-medium">Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rejectedRows.map((row) => (
-                <tr key={row.rowNumber} className="border-b border-border last:border-0">
-                  <td className="px-3 py-1.5 font-figures">{row.rowNumber}</td>
-                  <td className="px-3 py-1.5 text-danger-solid">{row.rejectionReason}</td>
-                  <td className="px-3 py-1.5 text-muted-foreground">
-                    {row.rawData.first_name} {row.rawData.last_name}
-                  </td>
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing the first {rejectedRows.length}{batch.rejectedCount > rejectedRows.length ? ` of ${batch.rejectedCount}` : ""} rejected
+              rows.
+            </p>
+            <a
+              href={`/api/import/${batch.id}/rejected-rows.csv`}
+              download
+              className="flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-2 hover:underline"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              Download all {batch.rejectedCount} rejected rows (CSV)
+            </a>
+          </div>
+          <div className="overflow-x-auto rounded-md border border-border bg-card shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-secondary text-left text-secondary-foreground">
+                  <th className="px-3 py-2 font-medium">Row</th>
+                  <th className="px-3 py-2 font-medium">Reason</th>
+                  <th className="px-3 py-2 font-medium">Data</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rejectedRows.map((row) => (
+                  <tr key={row.rowNumber} className="border-b border-border last:border-0">
+                    <td className="px-3 py-1.5 font-figures">{row.rowNumber}</td>
+                    <td className="px-3 py-1.5 text-danger-solid">{row.rejectionReason}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground">
+                      {row.mappedData.first_name} {row.mappedData.last_name}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 
@@ -111,7 +152,7 @@ export async function BatchDetailView({
           <RevertButtonForm entityType={entityType} batchId={batch.id} redirectBasePath={redirectBasePath} />
         ) : (
           <p className="text-sm text-muted-foreground">
-            Committed {batch.committedAt ? new Date(batch.committedAt).toLocaleDateString() : ""} -- the {REVERT_WINDOW_DAYS}
+            Committed {formatDateTimeDisplayIst(batch.committedAt)} -- the {REVERT_WINDOW_DAYS}
             -day revert window has closed.
           </p>
         )

@@ -36,9 +36,9 @@ export function SortableHeader({
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className={`flex items-center gap-1 text-muted-foreground hover:text-foreground ${
-          align === "right" ? "ml-auto flex-row-reverse" : ""
-        }`}
+        className={`flex items-center gap-1 hover:text-foreground ${
+          active ? "text-primary" : "text-muted-foreground"
+        } ${align === "right" ? "ml-auto flex-row-reverse" : ""}`}
       >
         <span>{label}</span>
         <Icon className="h-3.5 w-3.5" aria-hidden="true" />

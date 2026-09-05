@@ -102,7 +102,6 @@ export function StaffFilterBar({
                 <SortableHeader label="Employee #" sortKey="employeeCode" currentSort={params.sort} currentDir={params.dir} onSort={onSort} />
                 <SortableHeader label="Name" sortKey="name" currentSort={params.sort} currentDir={params.dir} onSort={onSort} />
                 <th className="px-3 py-2 font-medium">Department</th>
-                <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">
                   <span className="sr-only">Actions</span>
                 </th>

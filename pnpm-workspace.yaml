@@ -1,3 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # apps/mobile is Expo/React Native (React 19) and is deliberately NOT part of this workspace's
+  # shared pnpm store/lockfile -- co-locating it here polluted apps/web's (React 18) TypeScript
+  # inference project-wide once its React 19 types entered the shared .pnpm store (~50 files
+  # started failing typecheck with "cannot be named without a reference to @types/react@19...").
+  # apps/mobile manages its own dependencies independently: `cd apps/mobile && pnpm install`,
+  # never from the repo root.
+  - "!apps/mobile"

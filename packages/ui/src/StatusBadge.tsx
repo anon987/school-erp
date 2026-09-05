@@ -2,12 +2,14 @@ import { CheckCircle2, XCircle, AlertTriangle, Circle, type LucideIcon } from "l
 import { cn } from "./cn";
 
 /**
- * The seven states named in docs/schoolerp_features.md, collapsed to four fixed semantics
- * (see docs/design-system.md for why: present/paid/approved all mean "good," absent/overdue
- * both mean "bad" -- fewer, more distinguishable hues beat seven similar ones, especially for
- * colorblind users).
+ * The states named in docs/schoolerp_features.md, collapsed to four fixed semantics (see
+ * docs/design-system.md for why: present/paid/approved all mean "good," absent/overdue both mean
+ * "bad" -- fewer, more distinguishable hues beat many similar ones, especially for colorblind
+ * users). half_day and leave (Attendance, §E) join the same four buckets rather than getting a
+ * fifth/sixth hue: half_day reads as a partial exception like late (warning), leave reads as a
+ * known, sanctioned, non-problem state like due/pending (info).
  */
-export type StatusState = "present" | "absent" | "late" | "paid" | "due" | "overdue" | "approved" | "pending";
+export type StatusState = "present" | "absent" | "late" | "half_day" | "leave" | "paid" | "due" | "overdue" | "approved" | "pending";
 
 type Semantic = "success" | "danger" | "warning" | "info";
 
@@ -21,8 +23,10 @@ const STATUS_SEMANTIC: Record<StatusState, { semantic: Semantic; Icon: LucideIco
   absent: { semantic: "danger", Icon: XCircle },
   overdue: { semantic: "danger", Icon: AlertTriangle },
   late: { semantic: "warning", Icon: AlertTriangle },
+  half_day: { semantic: "warning", Icon: AlertTriangle },
   due: { semantic: "info", Icon: Circle },
   pending: { semantic: "info", Icon: Circle },
+  leave: { semantic: "info", Icon: Circle },
 };
 
 const SEMANTIC_CLASSES: Record<Semantic, string> = {

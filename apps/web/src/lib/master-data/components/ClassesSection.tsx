@@ -3,7 +3,7 @@
 import { useFormState, useFormStatus } from "react-dom";
 import { createClassAction, deleteClassAction, updateClassAction, type MasterDataFormState } from "../actions";
 import type { ClassRow } from "../types";
-import { DeleteRowButton } from "./DeleteRowButton";
+import { DeleteRowButton } from "@/components/DeleteRowButton";
 import { EditableText } from "./EditableText";
 
 const initialState: MasterDataFormState = {};

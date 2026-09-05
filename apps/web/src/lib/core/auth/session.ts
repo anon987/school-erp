@@ -47,3 +47,23 @@ export async function getSession(): Promise<AppSession | null> {
     roles: claims.roles,
   };
 }
+
+/**
+ * The raw access token, not exposed on AppSession itself -- only one caller needs it
+ * (lib/members/actions.ts, forwarding the caller's own identity to apps/worker's HTTP entry
+ * point so it can verify the request under RLS as that user) and every other consumer of
+ * getSession() has no business handling a bearer token.
+ */
+export async function getAccessToken(): Promise<string | null> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) return null;
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}

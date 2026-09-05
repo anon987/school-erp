@@ -6,8 +6,15 @@ import { getSession } from "@/lib/core/auth/session";
 import { requirePermission } from "@/lib/core/auth/permissions";
 import {
   academicYearInputSchema,
+  admissionDocumentTypeInputSchema,
+  admissionStageInputSchema,
   classInputSchema,
+  gradeBandInputSchema,
+  holidayInputSchema,
+  hpcCriterionInputSchema,
+  hpcRatingScaleInputSchema,
   namedEntityInputSchema,
+  periodInputSchema,
   sectionInputSchema,
   studentCategoryInputSchema,
   subjectInputSchema,
@@ -38,7 +45,22 @@ async function writeAuditLog(schoolId: string, actorAuthUserId: string, action: 
 }
 
 /** Every master-data table here is (school_id, id, ...) -- one delete path, not eight duplicated ones. */
-type MasterDataTable = "academic_year" | "class" | "section" | "subject" | "department" | "designation" | "house" | "student_category";
+type MasterDataTable =
+  | "academic_year"
+  | "class"
+  | "section"
+  | "subject"
+  | "department"
+  | "designation"
+  | "house"
+  | "student_category"
+  | "holiday"
+  | "grade_band"
+  | "admission_stage"
+  | "admission_document_type"
+  | "period"
+  | "hpc_criterion"
+  | "hpc_rating_scale";
 
 async function deleteRow(table: MasterDataTable, id: string, action: string): Promise<MasterDataFormState> {
   await requirePermission(PERMISSION);
@@ -481,4 +503,365 @@ export async function deleteStudentCategoryAction(
   _formData: FormData,
 ): Promise<MasterDataFormState> {
   return deleteRow("student_category", id, "master_data.student_category.deleted");
+}
+
+// ---------------------------------------------------------------------------
+// Holidays -- see packages/db/supabase/migrations/20260904060000_holiday_calendar.sql for why
+// this exists now (a P0 spec item Attendance, P1, turned out to actually depend on).
+// ---------------------------------------------------------------------------
+
+export async function createHolidayAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = holidayInputSchema.safeParse({ date: readField(formData, "date"), name: readField(formData, "name") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("holiday")
+    .insert({ school_id: session.schoolId, date: parsed.data.date, name: parsed.data.name })
+    .select("id")
+    .single();
+  if (error || !data) {
+    if (error?.code === "23505") return { error: "A holiday is already recorded on that date." };
+    return { error: error?.message ?? "Could not create holiday." };
+  }
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.holiday.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+// Name only -- date is the identifying field (the unique constraint and the marking-screen
+// lookup are keyed on it); correcting a wrong date means delete-and-recreate, same trade-off
+// student_category's key/label split makes for its own stable identifier.
+export async function updateHolidayAction(id: string, _prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const name = readField(formData, "name").trim();
+  if (!name) return { error: "Name is required" };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("holiday").update({ name }).eq("id", id).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.holiday.updated", id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function deleteHolidayAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
+  return deleteRow("holiday", id, "master_data.holiday.deleted");
+}
+
+// ---------------------------------------------------------------------------
+// Grade bands -- Exams' prerequisite (fn_resolve_grade maps a percentage onto one of these).
+// Add-and-delete only, like Holidays: correcting a wrong band is delete-and-recreate rather than
+// an inline edit, since getting a band boundary wrong is rare and the whole row (four fields) is
+// the natural unit of correction, not one field at a time.
+// ---------------------------------------------------------------------------
+
+export async function createGradeBandAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = gradeBandInputSchema.safeParse({
+    minPercentage: readField(formData, "minPercentage"),
+    maxPercentage: readField(formData, "maxPercentage"),
+    gradeLabel: readField(formData, "gradeLabel"),
+    gradePoint: readField(formData, "gradePoint") || undefined,
+    remark: readField(formData, "remark") || undefined,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("grade_band")
+    .insert({
+      school_id: session.schoolId,
+      min_percentage: parsed.data.minPercentage,
+      max_percentage: parsed.data.maxPercentage,
+      grade_label: parsed.data.gradeLabel,
+      grade_point: parsed.data.gradePoint ?? null,
+      remark: parsed.data.remark ?? null,
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { error: error?.message ?? "Could not create grade band." };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.grade_band.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function deleteGradeBandAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
+  return deleteRow("grade_band", id, "master_data.grade_band.deleted");
+}
+
+// ---------------------------------------------------------------------------
+// Admissions (P2, §C) -- configurable pipeline stages and document-checklist types. `stageType`
+// / `isRequired` are extra fields namedEntityInputSchema doesn't carry, so these get their own
+// create/update, same shape as student_category's above, not the bare-name helpers.
+// ---------------------------------------------------------------------------
+
+export async function createAdmissionStageAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = admissionStageInputSchema.safeParse({
+    name: readField(formData, "name"),
+    stageType: readField(formData, "stageType") || "in_progress",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { count } = await supabase
+    .from("admission_stage")
+    .select("id", { count: "exact", head: true })
+    .eq("school_id", session.schoolId);
+
+  const { data, error } = await supabase
+    .from("admission_stage")
+    .insert({ school_id: session.schoolId, name: parsed.data.name, stage_type: parsed.data.stageType, sort_order: count ?? 0 })
+    .select("id")
+    .single();
+  if (error || !data) {
+    if (error?.code === "23505") return { error: "A stage with this name already exists." };
+    return { error: error?.message ?? "Could not create stage." };
+  }
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.admission_stage.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+// Name only -- stageType is the stable identifier fn_confirm_admission looks up the 'admitted'
+// stage by (see the migration's comment); changing it after creation is delete-and-recreate,
+// same rule as student_category's key.
+export async function updateAdmissionStageAction(
+  id: string,
+  _prevState: MasterDataFormState,
+  formData: FormData,
+): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const name = readField(formData, "name").trim();
+  if (!name) return { error: "Name is required" };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("admission_stage").update({ name }).eq("id", id).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.admission_stage.updated", id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function deleteAdmissionStageAction(
+  id: string,
+  _prevState: MasterDataFormState,
+  _formData: FormData,
+): Promise<MasterDataFormState> {
+  return deleteRow("admission_stage", id, "master_data.admission_stage.deleted");
+}
+
+export async function createAdmissionDocumentTypeAction(
+  _prevState: MasterDataFormState,
+  formData: FormData,
+): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = admissionDocumentTypeInputSchema.safeParse({
+    name: readField(formData, "name"),
+    isRequired: formData.get("isRequired") === "on",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { count } = await supabase
+    .from("admission_document_type")
+    .select("id", { count: "exact", head: true })
+    .eq("school_id", session.schoolId);
+
+  const { data, error } = await supabase
+    .from("admission_document_type")
+    .insert({ school_id: session.schoolId, name: parsed.data.name, is_required: parsed.data.isRequired, sort_order: count ?? 0 })
+    .select("id")
+    .single();
+  if (error || !data) {
+    if (error?.code === "23505") return { error: "A document type with this name already exists." };
+    return { error: error?.message ?? "Could not create document type." };
+  }
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.admission_document_type.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+// Name only -- same reasoning as updateAdmissionStageAction above; change is_required by
+// delete-and-recreate.
+export async function updateAdmissionDocumentTypeAction(
+  id: string,
+  _prevState: MasterDataFormState,
+  formData: FormData,
+): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const name = readField(formData, "name").trim();
+  if (!name) return { error: "Name is required" };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("admission_document_type").update({ name }).eq("id", id).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.admission_document_type.updated", id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function deleteAdmissionDocumentTypeAction(
+  id: string,
+  _prevState: MasterDataFormState,
+  _formData: FormData,
+): Promise<MasterDataFormState> {
+  return deleteRow("admission_document_type", id, "master_data.admission_document_type.deleted");
+}
+
+// ---------------------------------------------------------------------------
+// Timetable (P2, §I) -- period timings. Add-and-delete only, like Holidays/Grade bands: a period
+// has four fields (number/label/start/end/is_break) that all change together when a school
+// revises its bell schedule -- delete-and-recreate is the natural unit of correction, not an
+// inline single-field edit.
+// ---------------------------------------------------------------------------
+
+export async function createPeriodAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = periodInputSchema.safeParse({
+    periodNumber: readField(formData, "periodNumber"),
+    label: readField(formData, "label"),
+    startTime: readField(formData, "startTime"),
+    endTime: readField(formData, "endTime"),
+    isBreak: formData.get("isBreak") === "on",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("period")
+    .insert({
+      school_id: session.schoolId,
+      period_number: parsed.data.periodNumber,
+      label: parsed.data.label,
+      start_time: parsed.data.startTime,
+      end_time: parsed.data.endTime,
+      is_break: parsed.data.isBreak,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    if (error?.code === "23505") return { error: "A period with this number already exists." };
+    return { error: error?.message ?? "Could not create period." };
+  }
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.period.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function deletePeriodAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
+  return deleteRow("period", id, "master_data.period.deleted");
+}
+
+// ---------------------------------------------------------------------------
+// Holistic Progress Card (P2, §H) -- co-curricular/life-skill criteria to rate, and the
+// qualitative rating scale (A/Excellent .. D/Needs Improvement) used to rate them. Add-and-delete
+// only, same reasoning as Holidays/Grade bands/Period: renaming a criterion or rescaling a grade
+// scheme is rare enough that delete-and-recreate is the natural correction, not an inline edit.
+// Sort order auto-increments per (school, category) for criteria and per school for the scale,
+// same counting approach as admission_stage/admission_document_type.
+// ---------------------------------------------------------------------------
+
+export async function createHpcCriterionAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = hpcCriterionInputSchema.safeParse({
+    category: readField(formData, "category") || "co_curricular",
+    name: readField(formData, "name"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { count } = await supabase
+    .from("hpc_criterion")
+    .select("id", { count: "exact", head: true })
+    .eq("school_id", session.schoolId)
+    .eq("category", parsed.data.category);
+
+  const { data, error } = await supabase
+    .from("hpc_criterion")
+    .insert({ school_id: session.schoolId, category: parsed.data.category, name: parsed.data.name, sort_order: count ?? 0 })
+    .select("id")
+    .single();
+  if (error || !data) {
+    if (error?.code === "23505") return { error: "A criterion with this name already exists in this category." };
+    return { error: error?.message ?? "Could not create criterion." };
+  }
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.hpc_criterion.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function deleteHpcCriterionAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
+  return deleteRow("hpc_criterion", id, "master_data.hpc_criterion.deleted");
+}
+
+export async function createHpcRatingScaleAction(_prevState: MasterDataFormState, formData: FormData): Promise<MasterDataFormState> {
+  await requirePermission(PERMISSION);
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = hpcRatingScaleInputSchema.safeParse({
+    code: readField(formData, "code"),
+    label: readField(formData, "label"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { count } = await supabase.from("hpc_rating_scale").select("id", { count: "exact", head: true }).eq("school_id", session.schoolId);
+
+  const { data, error } = await supabase
+    .from("hpc_rating_scale")
+    .insert({ school_id: session.schoolId, code: parsed.data.code, label: parsed.data.label, sort_order: count ?? 0 })
+    .select("id")
+    .single();
+  if (error || !data) {
+    if (error?.code === "23505") return { error: "A rating with this code already exists." };
+    return { error: error?.message ?? "Could not create rating." };
+  }
+
+  await writeAuditLog(session.schoolId, session.authUserId, "master_data.hpc_rating_scale.created", data.id);
+  revalidatePath(PAGE_PATH);
+  return {};
+}
+
+export async function deleteHpcRatingScaleAction(id: string, _prevState: MasterDataFormState, _formData: FormData): Promise<MasterDataFormState> {
+  return deleteRow("hpc_rating_scale", id, "master_data.hpc_rating_scale.deleted");
 }

@@ -262,13 +262,14 @@ the 2-3 key identifiers (admission number / employee code as `.font-figures`, cl
 department-designation), plus a status badge *only* when the status isn't the default good state
 (see Specific fixes, below — this is the same rule as the table row, not a separate one).
 
-Below/beside the rail, the record's attached modules render as collapsible sections (accordion:
-header with a chevron, click to expand/collapse, one or more open by default — e.g. "Profile"
-open, "Attendance"/"Fees"/"Exams"/"Documents" collapsed until a student has data in them). This
-is deliberately over-built for what Students/Staff need *today* (profile + guardians +
-documents) because those sections will accumulate attendance, fee, and exam data as later phases
-ship — designing the flat version now means rebuilding this page's structure later instead of
-just adding a section.
+Below/beside the rail, the record's attached modules render as tabs (`components/Tabs.tsx`), not
+stacked collapsible sections — the original collapsible-accordion design became a page you had to
+scroll past to reach the last section once Fees/Attendance/Exams/Documents all had real content.
+Every tab's data is still fetched server-side up front (same as before); the tab component only
+controls which one is visible client-side, so switching tabs costs no round trip. This is
+deliberately over-built for what Students/Staff need *today* (profile + guardians + documents)
+because those tabs will accumulate attendance, fee, and exam data as later phases ship — adding a
+later module means adding another entry to the `tabs` array, not restructuring the page.
 
 **Breadcrumbs.** Above the page title: `Students / Ravi Kumar` — `text-sm text-muted-foreground`,
 `ChevronRight` (14px) between segments, each segment before the last is a link. Every

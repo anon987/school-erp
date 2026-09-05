@@ -9,7 +9,7 @@
     "push": "supabase db push",
     "diff": "supabase db diff",
     "new-migration": "supabase migration new",
-    "gen-types": "supabase gen types typescript --local > ../types/src/database.ts",
+    "gen-types": "supabase gen types typescript --linked > ../types/src/database.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

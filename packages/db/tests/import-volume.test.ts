@@ -180,6 +180,48 @@ describe("import pipeline at realistic volume (~2,000 students)", () => {
       // 2 guardians per student.
       expect(guardianLinkCount).toBeGreaterThanOrEqual(STUDENT_COUNT * 2);
 
+      // Per-class assertion, not just a total: a total-only check passes even when the commit
+      // loop silently stalled partway through a class (chunk failure mid-loop, statement timeout
+      // on one chunk, generateStudents' class cycling changed without updating this test) --
+      // the aggregate count can still clear STUDENT_COUNT from earlier runs of this same suite
+      // against this persistent database while one or more classes end up with zero rows for the
+      // CURRENT academic year. This is the exact failure mode that reached the dashboard
+      // undetected: a half-populated enrollment table where specific classes read zero. Checked
+      // with a `head: true` count per class -- not a plain `.select("class_id")` fetch -- for the
+      // same reason apps/web/src/lib/dashboard/queries.ts does: an unpaginated select is capped
+      // at PostgREST's default max-rows and would silently under-report here too.
+      const { data: academicYear, error: academicYearError } = await client
+        .from("academic_year")
+        .select("id")
+        .eq("school_id", PILOT_SCHOOL_ID)
+        .eq("is_current", true)
+        .single();
+      expect(academicYearError).toBeNull();
+      const academicYearId = (academicYear as unknown as { id: string }).id;
+
+      const { data: classes, error: classesError } = await client
+        .from("class")
+        .select("id, name")
+        .eq("school_id", PILOT_SCHOOL_ID);
+      expect(classesError).toBeNull();
+      const classRows = (classes ?? []) as unknown as { id: string; name: string }[];
+      expect(classRows.length).toBeGreaterThan(0);
+
+      for (const classRow of classRows) {
+        const { count: classEnrollmentCount, error: classCountError } = await client
+          .from("enrollment")
+          .select("id", { count: "exact", head: true })
+          .eq("school_id", PILOT_SCHOOL_ID)
+          .eq("academic_year_id", academicYearId)
+          .eq("class_id", classRow.id);
+        expect(classCountError).toBeNull();
+        expect(
+          classEnrollmentCount,
+          `class "${classRow.name}" has zero enrolled students for the current academic year -- ` +
+            `the import ran but left this class unpopulated`,
+        ).toBeGreaterThan(0);
+      }
+
       // No hard pass/fail threshold asserted on timing -- the point of this test is to SURFACE
       // the numbers so a real timeout/memory ceiling can be judged against them, not to encode
       // an arbitrary "must be under Nms" that would be a guess about infrastructure this test

@@ -1,7 +1,16 @@
 import { createSupabaseServerClient } from "@/lib/core/supabase/server";
 import type {
   AcademicYearRow,
+  AdmissionDocumentTypeRow,
+  AdmissionStageRow,
+  AdmissionStageType,
   ClassWithSections,
+  PeriodRow,
+  GradeBandRow,
+  HolidayRow,
+  HpcCriterionCategory,
+  HpcCriterionRow,
+  HpcRatingScaleRow,
   MasterDataOverview,
   NamedRow,
   SectionRow,
@@ -20,23 +29,65 @@ const toNamedRows = (data: { id: string; name: string }[] | null): NamedRow[] =>
 export async function getMasterDataOverview(schoolId: string): Promise<MasterDataOverview> {
   const supabase = await createSupabaseServerClient();
 
-  const [yearsRes, classesRes, sectionsRes, subjectsRes, departmentsRes, designationsRes, housesRes, categoriesRes] =
-    await Promise.all([
-      supabase
-        .from("academic_year")
-        .select("id, name, start_date, end_date, is_current")
-        .eq("school_id", schoolId)
-        .order("start_date", { ascending: false }),
-      supabase.from("class").select("id, name, sort_order").eq("school_id", schoolId).order("sort_order"),
-      supabase.from("section").select("id, class_id, name").eq("school_id", schoolId).order("name"),
-      supabase.from("subject").select("id, name, code").eq("school_id", schoolId).order("name"),
-      supabase.from("department").select("id, name").eq("school_id", schoolId).order("name"),
-      supabase.from("designation").select("id, name").eq("school_id", schoolId).order("name"),
-      supabase.from("house").select("id, name").eq("school_id", schoolId).order("name"),
-      supabase.from("student_category").select("id, key, label").eq("school_id", schoolId).order("label"),
-    ]);
+  const [
+    yearsRes,
+    classesRes,
+    sectionsRes,
+    subjectsRes,
+    departmentsRes,
+    designationsRes,
+    housesRes,
+    categoriesRes,
+    holidaysRes,
+    gradeBandsRes,
+    admissionStagesRes,
+    admissionDocumentTypesRes,
+    periodsRes,
+    hpcCriteriaRes,
+    hpcRatingScalesRes,
+  ] = await Promise.all([
+    supabase
+      .from("academic_year")
+      .select("id, name, start_date, end_date, is_current")
+      .eq("school_id", schoolId)
+      .order("start_date", { ascending: false }),
+    supabase.from("class").select("id, name, sort_order").eq("school_id", schoolId).order("sort_order"),
+    supabase.from("section").select("id, class_id, name").eq("school_id", schoolId).order("name"),
+    supabase.from("subject").select("id, name, code").eq("school_id", schoolId).order("name"),
+    supabase.from("department").select("id, name").eq("school_id", schoolId).order("name"),
+    supabase.from("designation").select("id, name").eq("school_id", schoolId).order("name"),
+    supabase.from("house").select("id, name").eq("school_id", schoolId).order("name"),
+    supabase.from("student_category").select("id, key, label").eq("school_id", schoolId).order("label"),
+    supabase.from("holiday").select("id, date, name").eq("school_id", schoolId).order("date"),
+    supabase
+      .from("grade_band")
+      .select("id, min_percentage, max_percentage, grade_label, grade_point, remark")
+      .eq("school_id", schoolId)
+      .order("min_percentage", { ascending: false }),
+    supabase.from("admission_stage").select("id, name, sort_order, stage_type").eq("school_id", schoolId).order("sort_order"),
+    supabase.from("admission_document_type").select("id, name, is_required, sort_order").eq("school_id", schoolId).order("sort_order"),
+    supabase.from("period").select("id, period_number, label, start_time, end_time, is_break").eq("school_id", schoolId).order("period_number"),
+    supabase.from("hpc_criterion").select("id, category, name, sort_order").eq("school_id", schoolId).order("category").order("sort_order"),
+    supabase.from("hpc_rating_scale").select("id, code, label, sort_order").eq("school_id", schoolId).order("sort_order"),
+  ]);
 
-  for (const res of [yearsRes, classesRes, sectionsRes, subjectsRes, departmentsRes, designationsRes, housesRes, categoriesRes]) {
+  for (const res of [
+    yearsRes,
+    classesRes,
+    sectionsRes,
+    subjectsRes,
+    departmentsRes,
+    designationsRes,
+    housesRes,
+    categoriesRes,
+    holidaysRes,
+    gradeBandsRes,
+    admissionStagesRes,
+    admissionDocumentTypesRes,
+    periodsRes,
+    hpcCriteriaRes,
+    hpcRatingScalesRes,
+  ]) {
     if (res.error) throw res.error;
   }
 
@@ -86,5 +137,46 @@ export async function getMasterDataOverview(schoolId: string): Promise<MasterDat
     designations: toNamedRows(designationsRes.data as { id: string; name: string }[] | null),
     houses: toNamedRows(housesRes.data as { id: string; name: string }[] | null),
     studentCategories,
+    holidays: ((holidaysRes.data ?? []) as unknown as { id: string; date: string; name: string }[]).map(
+      (h) => ({ id: h.id, date: h.date, name: h.name }) satisfies HolidayRow,
+    ),
+    gradeBands: (
+      (gradeBandsRes.data ?? []) as unknown as {
+        id: string;
+        min_percentage: number;
+        max_percentage: number;
+        grade_label: string;
+        grade_point: number | null;
+        remark: string | null;
+      }[]
+    ).map(
+      (g) =>
+        ({
+          id: g.id,
+          minPercentage: g.min_percentage,
+          maxPercentage: g.max_percentage,
+          gradeLabel: g.grade_label,
+          gradePoint: g.grade_point,
+          remark: g.remark,
+        }) satisfies GradeBandRow,
+    ),
+    admissionStages: (
+      (admissionStagesRes.data ?? []) as unknown as { id: string; name: string; sort_order: number; stage_type: AdmissionStageType }[]
+    ).map((s) => ({ id: s.id, name: s.name, sortOrder: s.sort_order, stageType: s.stage_type }) satisfies AdmissionStageRow),
+    admissionDocumentTypes: (
+      (admissionDocumentTypesRes.data ?? []) as unknown as { id: string; name: string; is_required: boolean; sort_order: number }[]
+    ).map((d) => ({ id: d.id, name: d.name, isRequired: d.is_required, sortOrder: d.sort_order }) satisfies AdmissionDocumentTypeRow),
+    periods: (
+      (periodsRes.data ?? []) as unknown as { id: string; period_number: number; label: string; start_time: string; end_time: string; is_break: boolean }[]
+    ).map(
+      (p) =>
+        ({ id: p.id, periodNumber: p.period_number, label: p.label, startTime: p.start_time.slice(0, 5), endTime: p.end_time.slice(0, 5), isBreak: p.is_break }) satisfies PeriodRow,
+    ),
+    hpcCriteria: ((hpcCriteriaRes.data ?? []) as unknown as { id: string; category: HpcCriterionCategory; name: string; sort_order: number }[]).map(
+      (c) => ({ id: c.id, category: c.category, name: c.name, sortOrder: c.sort_order }) satisfies HpcCriterionRow,
+    ),
+    hpcRatingScales: ((hpcRatingScalesRes.data ?? []) as unknown as { id: string; code: string; label: string; sort_order: number }[]).map(
+      (r) => ({ id: r.id, code: r.code, label: r.label, sortOrder: r.sort_order }) satisfies HpcRatingScaleRow,
+    ),
   };
 }

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/core/supabase/server";
 import { getSession } from "@/lib/core/auth/session";
 import { requirePermission } from "@/lib/core/auth/permissions";
-import { staffInputSchema, updateStaffInputSchema, qualificationInputSchema } from "./schemas";
+import { staffInputSchema, updateStaffInputSchema, qualificationInputSchema, staffAssignmentInputSchema, leaveTypeInputSchema, leaveRequestInputSchema } from "./schemas";
 
 export interface StaffFormState {
   error?: string;
@@ -182,5 +182,182 @@ export async function addQualificationAction(
   if (error) return { error: error.message };
 
   revalidatePath(`/people/staff/${parsed.data.staffId}`);
+  return {};
+}
+
+export interface AssignmentFormState {
+  error?: string;
+}
+
+export async function createStaffAssignmentAction(_prevState: AssignmentFormState, formData: FormData): Promise<AssignmentFormState> {
+  await requirePermission("school.manage_staff");
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = staffAssignmentInputSchema.safeParse({
+    staffId: readField(formData, "staffId"),
+    academicYearId: readField(formData, "academicYearId"),
+    classId: readField(formData, "classId"),
+    sectionId: readField(formData, "sectionId"),
+    subjectId: readField(formData, "subjectId"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("staff_class_subject").insert({
+    school_id: session.schoolId,
+    staff_id: parsed.data.staffId,
+    academic_year_id: parsed.data.academicYearId,
+    class_id: parsed.data.classId,
+    section_id: parsed.data.sectionId,
+    subject_id: parsed.data.subjectId,
+  });
+  if (error) {
+    if (error.code === "23505") return { error: "This class, section, and subject already has a teacher assigned this year -- remove that assignment first." };
+    return { error: error.message };
+  }
+
+  await supabase.from("audit_log").insert({
+    school_id: session.schoolId,
+    actor_auth_user_id: session.authUserId,
+    action: "staff.assignment_added",
+    entity_type: "staff",
+    entity_id: parsed.data.staffId,
+    metadata: { classId: parsed.data.classId, sectionId: parsed.data.sectionId, subjectId: parsed.data.subjectId },
+  });
+
+  revalidatePath(`/people/staff/${parsed.data.staffId}`);
+  return {};
+}
+
+export async function deleteStaffAssignmentAction(staffId: string, assignmentId: string, _prevState: AssignmentFormState, _formData: FormData): Promise<AssignmentFormState> {
+  await requirePermission("school.manage_staff");
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("staff_class_subject").delete().eq("id", assignmentId).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await supabase.from("audit_log").insert({
+    school_id: session.schoolId,
+    actor_auth_user_id: session.authUserId,
+    action: "staff.assignment_removed",
+    entity_type: "staff",
+    entity_id: staffId,
+    metadata: { assignmentId },
+  });
+
+  revalidatePath(`/people/staff/${staffId}`);
+  return {};
+}
+
+export interface LeaveTypeFormState {
+  error?: string;
+}
+
+export async function createLeaveTypeAction(_prevState: LeaveTypeFormState, formData: FormData): Promise<LeaveTypeFormState> {
+  await requirePermission("school.manage_staff");
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = leaveTypeInputSchema.safeParse({ name: readField(formData, "name"), isPaid: formData.get("isPaid") === "on" });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("leave_type").insert({ school_id: session.schoolId, name: parsed.data.name, is_paid: parsed.data.isPaid });
+  if (error) {
+    if (error.code === "23505") return { error: "A leave type with this name already exists." };
+    return { error: error.message };
+  }
+
+  revalidatePath("/people/staff");
+  return {};
+}
+
+export async function deleteLeaveTypeAction(id: string, _prevState: LeaveTypeFormState, _formData: FormData): Promise<LeaveTypeFormState> {
+  await requirePermission("school.manage_staff");
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("leave_type").delete().eq("id", id).eq("school_id", session.schoolId);
+  if (error) return { error: "Can't delete a leave type that already has leave records against it." };
+
+  revalidatePath("/people/staff");
+  return {};
+}
+
+export interface LeaveRequestFormState {
+  error?: string;
+}
+
+/**
+ * Logging a leave IS approving it -- whoever holds school.manage_staff and enters this record is
+ * the authority for it, the same "the person entering it has the authority" pattern marks entry
+ * and fines already use elsewhere in this app. There is no separate pending-then-approve queue in
+ * this pass (no self-service staff portal exists yet to submit a pending request from).
+ */
+export async function createLeaveRequestAction(_prevState: LeaveRequestFormState, formData: FormData): Promise<LeaveRequestFormState> {
+  await requirePermission("school.manage_staff");
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const parsed = leaveRequestInputSchema.safeParse({
+    staffId: readField(formData, "staffId"),
+    leaveTypeId: readField(formData, "leaveTypeId"),
+    startDate: readField(formData, "startDate"),
+    endDate: readField(formData, "endDate"),
+    reason: readField(formData, "reason") || undefined,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("leave_request").insert({
+    school_id: session.schoolId,
+    staff_id: parsed.data.staffId,
+    leave_type_id: parsed.data.leaveTypeId,
+    start_date: parsed.data.startDate,
+    end_date: parsed.data.endDate,
+    reason: parsed.data.reason || null,
+    status: "approved",
+    applied_by_auth_user_id: session.authUserId,
+    decided_by_auth_user_id: session.authUserId,
+    decided_at: new Date().toISOString(),
+  });
+  if (error) return { error: error.message };
+
+  await supabase.from("audit_log").insert({
+    school_id: session.schoolId,
+    actor_auth_user_id: session.authUserId,
+    action: "staff.leave_logged",
+    entity_type: "staff",
+    entity_id: parsed.data.staffId,
+    metadata: { leaveTypeId: parsed.data.leaveTypeId, startDate: parsed.data.startDate, endDate: parsed.data.endDate },
+  });
+
+  revalidatePath(`/people/staff/${parsed.data.staffId}`);
+  return {};
+}
+
+export async function cancelLeaveRequestAction(staffId: string, leaveRequestId: string, _prevState: LeaveRequestFormState, _formData: FormData): Promise<LeaveRequestFormState> {
+  await requirePermission("school.manage_staff");
+  const session = await getSession();
+  if (!session?.schoolId) return { error: "No school in session." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("leave_request").update({ status: "cancelled" }).eq("id", leaveRequestId).eq("school_id", session.schoolId);
+  if (error) return { error: error.message };
+
+  await supabase.from("audit_log").insert({
+    school_id: session.schoolId,
+    actor_auth_user_id: session.authUserId,
+    action: "staff.leave_cancelled",
+    entity_type: "staff",
+    entity_id: staffId,
+    metadata: { leaveRequestId },
+  });
+
+  revalidatePath(`/people/staff/${staffId}`);
   return {};
 }

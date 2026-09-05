@@ -5,7 +5,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { Pencil } from "lucide-react";
 import { createSubjectAction, deleteSubjectAction, updateSubjectAction, type MasterDataFormState } from "../actions";
 import type { SubjectRow } from "../types";
-import { DeleteRowButton } from "./DeleteRowButton";
+import { DeleteRowButton } from "@/components/DeleteRowButton";
 
 const initialState: MasterDataFormState = {};
 

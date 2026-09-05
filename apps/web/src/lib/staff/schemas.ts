@@ -32,3 +32,26 @@ export const qualificationInputSchema = z.object({
     .optional()
     .refine((v) => !v || /^\d{4}$/.test(v), "Enter a 4-digit year"),
 });
+
+export const staffAssignmentInputSchema = z.object({
+  staffId: z.string().uuid(),
+  academicYearId: z.string().uuid(),
+  classId: z.string().uuid("Choose a class"),
+  sectionId: z.string().uuid("Choose a section"),
+  subjectId: z.string().uuid("Choose a subject"),
+});
+
+export const leaveTypeInputSchema = z.object({
+  name: z.string().trim().min(1, "Required"),
+  isPaid: z.boolean().default(true),
+});
+
+export const leaveRequestInputSchema = z
+  .object({
+    staffId: z.string().uuid(),
+    leaveTypeId: z.string().uuid("Choose a leave type"),
+    startDate: isoDateSchema,
+    endDate: isoDateSchema,
+    reason: z.string().trim().optional(),
+  })
+  .refine((v) => v.endDate >= v.startDate, { message: "End date can't be before start date", path: ["endDate"] });

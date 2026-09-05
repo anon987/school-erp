@@ -306,9 +306,9 @@ These go in `CLAUDE.md` at the repo root.
 
 | Question | Status |
 |---|---|
-| Hindi localisation approach (i18n library vs DB-stored strings) | Decide before `P2` |
+| Hindi localisation approach (i18n library vs DB-stored strings) | **Decided (P2):** i18n library, keys in code, extending `apps/web/src/lib/core/i18n.ts`'s existing `t()`/`TranslationKey` pattern — not yet implemented (still English-only as of this writing) |
 | Report card PDF generation (server-side React → PDF vs template engine) | Decide during `P1` |
 | Worker hosting (Railway vs Fly.io vs Supabase Edge Functions) | Decide during `P0` |
-| Mobile: single app with role switching vs separate parent and teacher apps | Decide before `P2` |
+| Mobile: single app with role switching vs separate parent and teacher apps | **Decided (P2):** single Expo app, role-based navigation (mirrors the web app's single-deployable `(app)`/`(portal)` split) |
 | Biometric device model at pilot school | Ask client — determines importer |
 | GPS vendor at pilot school | Ask client — determines adapter |

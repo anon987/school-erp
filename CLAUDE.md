@@ -71,8 +71,11 @@ If something seems missing from the current phase, check the spec before adding 
 - **Migrations only.** No manual schema edits in the Supabase dashboard.
 - **Money is integer paise.** Never floats for currency, anywhere.
 - **Timestamps are UTC** in the database, rendered in IST.
+- **Dates display as dd/mm/yyyy, never mm/dd/yyyy.** This is an Indian product; every user reads dates day-first. Use `formatDateDisplay` (plain dates: dob, joining_date, attendance_date, academic year start/end) and `formatDateTimeDisplayIst` (timestamptz values: created_at, marked_at, committed_at — converts to Asia/Kolkata, never the server process's local time) from `apps/web/src/lib/core/dateIst.ts` for every date/timestamp shown as text. Never `new Date(x).toLocaleDateString()` or `.toLocaleString()` with no explicit format — the output format then follows the Node process's default locale (commonly `en-US`, i.e. mm/dd/yyyy), not this product's convention; this exact bug shipped once already (`BatchDetailView.tsx`, fixed 2026-09-04). Native `<input type="date">`/`<input type="month">` cannot be forced into dd/mm/yyyy this way — their displayed format follows the browser's OS locale and no CSS/JS override exists for it; changing that requires replacing the native input with a custom date-picker component, which has not been done anywhere in this codebase yet. Treat that as a separate, larger decision, not an extension of the display-formatting fix.
 - **Server-side authorization on every mutation.** Hiding a button in the UI is presentation, not security.
 - **Parent access must verify the `student_guardian` link server-side** on every request, not filter client-side.
+- **Never add a sensitive/protected personal-data field (religion, caste, Aadhaar or other government ID, etc.) to the schema or a printed document without explicit sign-off.** These carry DPDPA implications, and Aadhaar specifically carries Aadhaar Act restrictions on private-entity collection/storage/display. This applies even when a reference design or a client request includes the field — flag it as a compliance decision for the product owner rather than adding it because the request implied it.
+- **Polymorphic per-record ownership uses `owner_type`/`owner_id` (or `entity_type`/`entity_id`), never a conditional FK.** Postgres has no FK that points at one of several tables depending on a sibling column, so every table that attaches to "a student or a staff member" (or any other either/or owner) validates the reference with a `before insert or update` trigger instead — see `fn_validate_document_owner` (`document` table) and `fn_validate_custom_field_value` (`custom_field_value` table) for the two existing copies of this pattern. Reuse this shape for the next one rather than inventing a third naming convention for the same problem.
 
 ---
 
@@ -97,6 +100,20 @@ Schools arrive with vendors already chosen. A school with an existing GPS contra
 `apps/worker` today is jobs/webhooks/reconciliation code invoked as scripts/cron — it has no HTTP server. That's fine for its current jobs, but it blocks `/settings/members` (role assignment for a school's staff): the mutation that grants/revokes roles (`setMemberRoles`) requires the service-role key, and the service-role key must never reach the client (rule 1 above). The web app cannot call it directly.
 
 `/settings/members` currently ships as a placeholder for exactly this reason. Building it out requires `apps/worker` to expose an HTTP endpoint that the web app's Server Actions can call (forwarding the caller's own session so the endpoint can authorize the request), not a shortcut where the web app talks to `setMemberRoles` with the service-role key itself. Treat "give `apps/worker` an HTTP entry point" as a prerequisite task for this ticket, not an optional refactor — it's a P1 blocker for pilot onboarding (the pilot school needs to assign roles to ~60 staff, which cannot happen by hand in SQL for a real customer).
+
+### `middleware.ts` must live inside `src/`, not beside it
+
+`apps/web` uses a `src/` layout (`src/app`, `src/components`, `src/lib`). Next.js only looks for
+middleware inside `src/` when a `src/` directory exists — a `middleware.ts` at the app root
+(`apps/web/middleware.ts`) is silently never invoked, no error or warning either way. This
+happened for real: the file sat in the wrong place for an unknown stretch of the build, so the
+per-request session-cookie refresh and (once added) session-expiry enforcement never ran, and
+nothing broke loudly enough to surface it — Server Components call `getUser()`/`getSession()`
+themselves, which masked it. Found by adding a `console.log` to the middleware function and
+noticing zero hits in the dev server output despite every page load. The file now lives at
+`apps/web/src/middleware.ts`. If a future middleware-based feature (rate limiting, a new redirect
+rule, another security check) appears to have no effect at all, check this before assuming the
+logic is wrong.
 
 ### apps/web code organization
 
@@ -149,6 +166,29 @@ Two layers: per-school branding (runtime, from the school record) and per-user d
 - Brand colour ramps are derived and contrast-clamped to WCAG AA, validated on save.
 - No flash of the wrong theme on load.
 
+### Printable documents don't all share one design gallery
+
+Fees receipts and Exam report cards are plain letterhead-style A4 documents — one shared palette
+covers them: `apps/web/src/lib/core/pdf/documentTemplates.ts` (5 designs: 2 black & white, 3 with
+a colored header band). Each school picks one default per document type, stored on that feature's
+own settings row (`school_branding.receipt_template`, `report_card_settings.template`).
+
+ID cards are deliberately **not** on that palette. A physical card is small and photo-centric, and
+real school ID cards vary in actual layout — curved panels, diagonal ribbons, arched photo frames
+— not just color; flattening that back down to "boxed/line/band" would lose the variety the
+feature needs. ID cards have their own gallery instead: `apps/web/src/lib/idCards/idCardTemplates.ts`
+(8 designs across 7 layout kinds), with `id_card_settings.student_template` / `staff_template`
+picked independently — a school may want a playful design for students and a plainer one for
+staff. Orientation (landscape/portrait) is a separate, orthogonal setting; every design supports
+both.
+
+Every printable-document feature has a paired HTML component (on-screen preview, and the settings
+gallery's thumbnails) and a `@react-pdf/renderer` component (the actual download) that must render
+identically — never let the two drift apart. `@react-pdf/renderer` clips overflowing content
+silently (no scrolling, no auto-shrink) rather than erroring, so any layout with optional
+show/hide fields must be verified with every field turned on, not just the happy path — a card
+that looks fine with one or two fields can silently drop rows once all of them are enabled.
+
 ### Financial integrity
 
 - Payment records are **immutable**. Corrections happen through adjustment or refund rows that reference the original transaction.
@@ -190,7 +230,7 @@ The users are teachers and clerks on low-end Android phones over patchy 4G in a 
 
 ## Localisation
 
-Hindi UI is a `P2` requirement, not a nice-to-have. The pilot school's staff are not English-first. Write strings so they can be translated — no concatenated sentence fragments, no text baked into images.
+Hindi UI moved to `P4` (product decision, 2026-09-06 — see `docs/schoolerp_features.md` §6). The pilot school's staff are not English-first, so this still matters; it was deferred only because full coverage means touching every component built across P0-P2, not because it stopped mattering. Until then: write strings so they *can* be translated later — no concatenated sentence fragments, no text baked into images — even though the actual `t()`/`TranslationKey` wiring (`apps/web/src/lib/core/i18n.ts`) is deferred too and today only covers nav labels + auth strings.
 
 ---
 
@@ -233,7 +273,7 @@ A feature is not done until:
 - [ ] It works on a 360px-wide screen
 - [ ] It has been checked in both light and dark mode
 - [ ] No hardcoded colours; status colours are not wired to themeable tokens
-- [ ] Money is integer paise, dates are UTC
+- [ ] Money is integer paise, dates are stored UTC and displayed dd/mm/yyyy in IST via `dateIst.ts`
 - [ ] Nothing school-specific is hard-coded
 
 ---

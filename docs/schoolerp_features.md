@@ -409,7 +409,7 @@ The pilot school runs on manual registers and Excel. Import is not a side featur
 | Security | TLS, RLS school isolation, server-side authorization on every request, audit logs |
 | Backups | Automated daily backups, tested restore procedure, documented retention |
 | Privacy | Minimise collected data, role-restrict student records, defined retention policy |
-| Localisation | INR, Indian date formats, Indian phone formats. **Hindi UI is a P2 requirement, not optional** — the pilot school's staff are not English-first. |
+| Localisation | INR, Indian date formats, Indian phone formats. **Hindi UI shifted to P4** (product decision, 2026-09-06) — the existing `t()`/`TranslationKey` scaffold in `apps/web/src/lib/core/i18n.ts` only covers nav labels + auth strings; full coverage requires touching every component built across P0-P2 and was judged too large to justify now. |
 | Accessibility | Readable contrast, labelled inputs, responsive down to 360px |
 | Observability | Error monitoring, structured logs, integration failure alerts |
 

@@ -9,16 +9,34 @@ import { t } from "@/lib/core/i18n";
 
 const STORAGE_KEY = "schoolerp.nav.collapsedGroups";
 
-function isActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+/**
+ * Exactly one nav item is ever "active" for a given pathname -- the item whose href is the
+ * LONGEST matching prefix, not every item whose href happens to be a prefix. Without this, a
+ * group whose landing page sits at the group's own base path (e.g. Exams' Dashboard at
+ * "/academics/exams", with siblings like "/academics/exams/manage" nested under it) would match
+ * both hrefs at once on every sibling page: Dashboard's prefix check
+ * ("/academics/exams/manage".startsWith("/academics/exams/")) is also true, so Dashboard never
+ * stopped looking selected, and the group's "has an active item" check was always true, so it
+ * could never collapse. Longest-prefix-wins fixes both by construction, for any current or future
+ * group shaped this way -- not a one-off patch for the Exams group specifically.
+ */
+function findActiveHref(pathname: string, dashboardItem: NavItem, groups: NavGroup[]): string | null {
+  const allHrefs = [dashboardItem.href, ...groups.flatMap((g) => g.items.map((item) => item.href))];
+  let best: string | null = null;
+  for (const href of allHrefs) {
+    if (pathname === href || pathname.startsWith(`${href}/`)) {
+      if (!best || href.length > best.length) best = href;
+    }
+  }
+  return best;
 }
 
-function groupContainsActive(pathname: string, group: NavGroup): boolean {
-  return group.items.some((item) => isActive(pathname, item.href));
+function groupContainsActive(activeHref: string | null, group: NavGroup): boolean {
+  return activeHref !== null && group.items.some((item) => item.href === activeHref);
 }
 
-function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
-  const active = isActive(pathname, item.href);
+function NavLink({ item, activeHref }: { item: NavItem; activeHref: string | null }) {
+  const active = item.href === activeHref;
   return (
     <Link
       href={item.href}
@@ -67,15 +85,17 @@ export function SidebarNav({ dashboardItem, groups }: { dashboardItem: NavItem; 
     });
   }
 
+  const activeHref = findActiveHref(pathname, dashboardItem, groups);
+
   return (
     <nav aria-label="Primary" className="w-56 shrink-0 border-r border-border p-2">
       <ul className="flex flex-col gap-1">
         <li>
-          <NavLink item={dashboardItem} pathname={pathname} />
+          <NavLink item={dashboardItem} activeHref={activeHref} />
         </li>
       </ul>
       {groups.map((group) => {
-        const hasActive = groupContainsActive(pathname, group);
+        const hasActive = groupContainsActive(activeHref, group);
         const isCollapsed = !hasActive && Boolean(collapsed[group.labelKey]);
         return (
           <div key={group.labelKey} className="mt-4">
@@ -97,7 +117,7 @@ export function SidebarNav({ dashboardItem, groups }: { dashboardItem: NavItem; 
               <ul className="mt-1 flex flex-col gap-1">
                 {group.items.map((item) => (
                   <li key={item.href}>
-                    <NavLink item={item} pathname={pathname} />
+                    <NavLink item={item} activeHref={activeHref} />
                   </li>
                 ))}
               </ul>

@@ -1,7 +1,11 @@
 import { createSupabaseServerClient } from "@/lib/core/supabase/server";
 import type {
+  AssignmentFormOptions,
   DepartmentOption,
   DesignationOption,
+  LeaveRequest,
+  LeaveType,
+  StaffAssignment,
   StaffDetail,
   StaffDirectoryFilters,
   StaffDirectoryPage,
@@ -159,4 +163,93 @@ export async function getStaffFormOptions(schoolId: string): Promise<StaffFormOp
     departments: (departmentsRes.data ?? []) as unknown as DepartmentOption[],
     designations: (designationsRes.data ?? []) as unknown as DesignationOption[],
   };
+}
+
+/** This staff member's class/section/subject assignments for one academic year -- drives the
+ *  "Assignments" tab on their profile. */
+export async function getStaffAssignments(schoolId: string, staffId: string, academicYearId: string): Promise<StaffAssignment[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("staff_class_subject")
+    .select("id, class:class_id(name), section:section_id(name), subject:subject_id(name)")
+    .eq("school_id", schoolId)
+    .eq("staff_id", staffId)
+    .eq("academic_year_id", academicYearId)
+    .order("class_id");
+  if (error) throw error;
+  return ((data ?? []) as unknown as { id: string; class: { name: string } | null; section: { name: string } | null; subject: { name: string } | null }[]).map((r) => ({
+    id: r.id,
+    className: r.class?.name ?? "",
+    sectionName: r.section?.name ?? "",
+    subjectName: r.subject?.name ?? "",
+  }));
+}
+
+export async function getAssignmentFormOptions(schoolId: string): Promise<AssignmentFormOptions> {
+  const supabase = await createSupabaseServerClient();
+  const [classesRes, sectionsRes, subjectsRes] = await Promise.all([
+    supabase.from("class").select("id, name").eq("school_id", schoolId).order("sort_order"),
+    supabase.from("section").select("id, class_id, name").eq("school_id", schoolId).order("name"),
+    supabase.from("subject").select("id, name").eq("school_id", schoolId).order("name"),
+  ]);
+  if (classesRes.error) throw classesRes.error;
+  if (sectionsRes.error) throw sectionsRes.error;
+  if (subjectsRes.error) throw subjectsRes.error;
+
+  return {
+    classes: (classesRes.data ?? []) as unknown as { id: string; name: string }[],
+    sections: ((sectionsRes.data ?? []) as unknown as { id: string; class_id: string; name: string }[]).map((s) => ({ id: s.id, classId: s.class_id, name: s.name })),
+    subjects: (subjectsRes.data ?? []) as unknown as { id: string; name: string }[],
+  };
+}
+
+export async function getLeaveTypes(schoolId: string): Promise<LeaveType[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("leave_type").select("id, name, is_paid").eq("school_id", schoolId).order("name");
+  if (error) throw error;
+  return ((data ?? []) as unknown as { id: string; name: string; is_paid: boolean }[]).map((r) => ({ id: r.id, name: r.name, isPaid: r.is_paid }));
+}
+
+/** Inclusive day count between two YYYY-MM-DD dates, computed via Date.UTC (no timezone
+ *  ambiguity) -- same reasoning as dateIst.ts's isSundayIso. */
+function inclusiveDayCount(startIso: string, endIso: string): number {
+  const [sy, sm, sd] = startIso.split("-").map(Number);
+  const [ey, em, ed] = endIso.split("-").map(Number);
+  const start = Date.UTC(sy ?? 1970, (sm ?? 1) - 1, sd ?? 1);
+  const end = Date.UTC(ey ?? 1970, (em ?? 1) - 1, ed ?? 1);
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+export async function getStaffLeaveRequests(schoolId: string, staffId: string): Promise<LeaveRequest[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("leave_request")
+    .select("id, leave_type_id, leave_type:leave_type_id(name), start_date, end_date, reason, status, created_at")
+    .eq("school_id", schoolId)
+    .eq("staff_id", staffId)
+    .order("start_date", { ascending: false });
+  if (error) throw error;
+
+  return (
+    (data ?? []) as unknown as {
+      id: string;
+      leave_type_id: string;
+      leave_type: { name: string } | null;
+      start_date: string;
+      end_date: string;
+      reason: string | null;
+      status: LeaveRequest["status"];
+      created_at: string;
+    }[]
+  ).map((r) => ({
+    id: r.id,
+    leaveTypeId: r.leave_type_id,
+    leaveTypeName: r.leave_type?.name ?? "",
+    startDate: r.start_date,
+    endDate: r.end_date,
+    dayCount: inclusiveDayCount(r.start_date, r.end_date),
+    reason: r.reason,
+    status: r.status,
+    appliedAt: r.created_at,
+  }));
 }

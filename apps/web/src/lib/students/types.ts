@@ -4,6 +4,9 @@
  * @schoolerp/types. See CLAUDE.md's "Domain types vs. generated types" convention.
  */
 
+/** "none" = no invoices generated yet for this student this year (not a status the school set). */
+export type StudentFeeStatus = "paid" | "due" | "none";
+
 export interface StudentListItem {
   id: string;
   admissionNumber: string;
@@ -14,6 +17,8 @@ export interface StudentListItem {
   className: string | null;
   sectionName: string | null;
   rollNumber: string | null;
+  feeStatus: StudentFeeStatus;
+  feeDueAmountPaise: number;
 }
 
 export interface GuardianInfo {
@@ -79,6 +84,7 @@ export interface StudentDirectoryFilters {
   search?: string | undefined;
   classId?: string | undefined;
   sectionId?: string | undefined;
+  feeStatus?: StudentFeeStatus | undefined;
   sort?: StudentSortKey | undefined;
   dir?: "asc" | "desc" | undefined;
 }
@@ -88,4 +94,30 @@ export interface StudentDirectoryPage {
   total: number;
   page: number;
   pageSize: number;
+}
+
+/** P1 baseline "student master" report -- every enrolled student for one academic year, not
+ *  paginated like the directory (that's for browsing, this is for exporting the whole list). */
+export interface StudentMasterReportRow {
+  admissionNumber: string;
+  firstName: string;
+  lastName: string;
+  dob: string | null;
+  gender: string | null;
+  className: string;
+  sectionName: string;
+  rollNumber: string | null;
+  status: string;
+  fatherName: string | null;
+  contactPhone: string | null;
+}
+
+/** P1 baseline "class strength" report. */
+export interface ClassStrengthRow {
+  className: string;
+  sectionName: string;
+  male: number;
+  female: number;
+  other: number;
+  total: number;
 }

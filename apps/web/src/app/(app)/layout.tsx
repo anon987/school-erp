@@ -30,12 +30,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const visibleGroups = getVisibleNavGroups(permissions);
 
-  // school_branding.brand_ramp is meant to cache this (computed once, at save time -- see the
-  // column comment in the school_isolation_core migration). No branding-edit UI exists yet
-  // (that's a feature build, out of scope this session) to ever populate it, so this
-  // recomputes on every request as a functional fallback. Swap for "prefer brand_ramp if
-  // present" once that save path exists.
-  const brandTokens = branding ? deriveBrandTokens(branding.brandColorHex) : null;
+  // school_branding.brand_ramp caches the computed light/dark tokens from the last save
+  // (lib/branding/actions.ts) -- prefer it so this doesn't recompute the derivation on every
+  // request. A school that predates the branding save flow (brand_ramp still null) falls back
+  // to computing it here, same as before that flow existed.
+  const brandTokens = branding ? (branding.brandRamp ?? deriveBrandTokens(branding.brandColorHex)) : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground">

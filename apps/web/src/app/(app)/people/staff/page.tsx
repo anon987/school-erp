@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { Plus, Upload, Users, SearchX } from "lucide-react";
-import { StatusBadge } from "@schoolerp/ui";
+import { Plus, Upload, Users, SearchX, IdCard } from "lucide-react";
 import { requireSession } from "@/lib/core/auth/requireSession";
 import { getPermissions } from "@/lib/core/auth/permissions";
-import { listStaff, getStaffFormOptions } from "@/lib/staff/queries";
+import { listStaff, getStaffFormOptions, getLeaveTypes } from "@/lib/staff/queries";
+import { LeaveTypesSection } from "@/lib/staff/components/LeaveTypesSection";
 import type { StaffSortKey } from "@/lib/staff/types";
-import { staffStatusBadgeState } from "@/lib/staff/statusBadge";
 import { Pagination } from "@/components/Pagination";
 import { StaffFilterBar } from "@/lib/staff/components/StaffFilterBar";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
@@ -36,9 +35,10 @@ export default async function StaffDirectoryPage({
   const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE;
   const hasActiveFilters = Boolean(search || departmentId);
 
-  const [directory, options] = await Promise.all([
+  const [directory, options, leaveTypes] = await Promise.all([
     listStaff(session.schoolId!, { search, departmentId: departmentId || undefined, sort: sort || undefined, dir }, page, pageSize),
     getStaffFormOptions(session.schoolId!),
+    getLeaveTypes(session.schoolId!),
   ]);
 
   function hrefFor(nextPage: number): string {
@@ -58,6 +58,13 @@ export default async function StaffDirectoryPage({
         <h1 className="text-2xl font-semibold">Staff</h1>
         {canManage ? (
           <div className="flex gap-2">
+            <Link
+              href="/people/staff/id-cards"
+              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
+            >
+              <IdCard className="h-4 w-4" aria-hidden="true" />
+              ID Cards
+            </Link>
             <Link
               href="/people/staff/import"
               className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary"
@@ -94,11 +101,6 @@ export default async function StaffDirectoryPage({
             <td className="px-3 py-1.5">
               <TwoLineCell primary={staff.departmentName ?? "—"} secondary={staff.designationName} />
             </td>
-            <td className="px-3 py-1.5">
-              {staffStatusBadgeState(staff.employmentStatus) ? (
-                <StatusBadge state={staffStatusBadgeState(staff.employmentStatus)!} label={staff.employmentStatus} />
-              ) : null}
-            </td>
             <td className="px-3 py-1.5 text-right">
               <RowActionsMenu
                 actions={[
@@ -111,7 +113,7 @@ export default async function StaffDirectoryPage({
         ))}
         {directory.items.length === 0 ? (
           <tr>
-            <td colSpan={5}>
+            <td colSpan={4}>
               {hasActiveFilters ? (
                 <EmptyState
                   icon={SearchX}
@@ -131,6 +133,8 @@ export default async function StaffDirectoryPage({
           </tr>
         ) : null}
       </StaffFilterBar>
+
+      {canManage ? <LeaveTypesSection leaveTypes={leaveTypes} /> : null}
     </div>
   );
 }

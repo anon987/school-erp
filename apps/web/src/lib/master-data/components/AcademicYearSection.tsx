@@ -11,7 +11,8 @@ import {
   type MasterDataFormState,
 } from "../actions";
 import type { AcademicYearRow } from "../types";
-import { DeleteRowButton } from "./DeleteRowButton";
+import { DeleteRowButton } from "@/components/DeleteRowButton";
+import { formatDateDisplay } from "@/lib/core/dateIst";
 
 const initialState: MasterDataFormState = {};
 
@@ -87,7 +88,8 @@ function AcademicYearRowItem({ year }: { year: AcademicYearRow }) {
     <li className="flex items-center justify-between py-1.5 text-sm">
       <button type="button" onClick={() => setEditing(true)} className="group flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-secondary">
         <span className="font-figures">
-          {year.name} ({year.startDate} – {year.endDate}) {year.isCurrent ? <strong className="text-success-solid">current</strong> : null}
+          {year.name} ({formatDateDisplay(year.startDate)} – {formatDateDisplay(year.endDate)}){" "}
+          {year.isCurrent ? <strong className="text-success-solid">current</strong> : null}
         </span>
         <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" aria-hidden="true" />
       </button>

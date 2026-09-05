@@ -15,6 +15,7 @@ interface ImportBatchRow {
   committed_at: string | null;
   reverted_at: string | null;
   created_at: string;
+  raw_headers: string[] | null;
 }
 
 export async function getImportBatch(schoolId: string, batchId: string): Promise<ImportBatchSummary | null> {
@@ -22,7 +23,7 @@ export async function getImportBatch(schoolId: string, batchId: string): Promise
   const { data, error } = await supabase
     .from("import_batch")
     .select(
-      "id, entity_type, match_mode, file_name, is_dry_run, status, total_rows, created_count, updated_count, rejected_count, committed_at, reverted_at, created_at",
+      "id, entity_type, match_mode, file_name, is_dry_run, status, total_rows, created_count, updated_count, rejected_count, committed_at, reverted_at, created_at, raw_headers",
     )
     .eq("school_id", schoolId)
     .eq("id", batchId)
@@ -46,6 +47,7 @@ export async function getImportBatch(schoolId: string, batchId: string): Promise
     committedAt: data.committed_at,
     revertedAt: data.reverted_at,
     createdAt: data.created_at,
+    rawHeaders: data.raw_headers,
   };
 }
 
@@ -53,17 +55,18 @@ export async function getRejectedRows(batchId: string, limit = 100): Promise<Rej
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("import_row")
-    .select("row_number, rejection_reason, raw_data")
+    .select("row_number, rejection_reason, raw_data, mapped_data")
     .eq("batch_id", batchId)
     .eq("validation_status", "rejected")
     .order("row_number", { ascending: true })
     .limit(limit)
-    .returns<{ row_number: number; rejection_reason: string | null; raw_data: Record<string, string> }[]>();
+    .returns<{ row_number: number; rejection_reason: string | null; raw_data: Record<string, string>; mapped_data: Record<string, string> }[]>();
 
   if (error) throw error;
   return (data ?? []).map((row) => ({
     rowNumber: row.row_number,
     rejectionReason: row.rejection_reason,
     rawData: row.raw_data,
+    mappedData: row.mapped_data,
   }));
 }

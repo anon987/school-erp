@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/core/supabase/server";
-import { getSession } from "@/lib/core/auth/session";
+import { getAccessToken, getSession } from "@/lib/core/auth/session";
 import { requirePermission } from "@/lib/core/auth/permissions";
+import { workerEnv } from "@/lib/core/worker/env";
 import { studentInputSchema, updateStudentInputSchema, type GuardianInput } from "./schemas";
 
 export interface StudentFormState {
@@ -259,4 +260,51 @@ export async function updateStudentAction(_prevState: StudentFormState, formData
 
   revalidatePath(`/people/students/${parsed.data.id}`);
   redirect(`/people/students/${parsed.data.id}`);
+}
+
+export interface InviteGuardianState {
+  error?: string;
+  inviteLink?: string;
+  status?: "invited" | "already_active" | "email_in_use";
+}
+
+/**
+ * Per-guardian invite, not a bulk job -- see apps/worker/src/lib/createGuardianPortalAccount.ts's
+ * header comment for why bulk-inviting all 2,200 already-imported guardians isn't built yet
+ * (no automated send channel until Communication, P2, ships). This is the same worker endpoint
+ * Admissions' confirm flow calls; here it's triggered on demand from a guardian's row on the
+ * student profile page.
+ */
+export async function inviteGuardianToPortalAction(
+  guardianId: string,
+  email: string,
+  _prevState: InviteGuardianState,
+  _formData: FormData,
+): Promise<InviteGuardianState> {
+  await requirePermission("school.manage_admissions");
+
+  const accessToken = await getAccessToken();
+  if (!accessToken) return { error: "Your session has expired -- sign in again." };
+
+  let response: Response;
+  try {
+    response = await fetch(`${workerEnv.WORKER_URL}/internal/guardians/${guardianId}/portal-account`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "X-Internal-Secret": workerEnv.WORKER_INTERNAL_SECRET,
+      },
+      body: JSON.stringify({ email }),
+    });
+  } catch {
+    return { error: "Could not reach the portal-account service. Try again in a moment." };
+  }
+
+  const body = (await response.json().catch(() => null)) as
+    | { status?: InviteGuardianState["status"]; inviteLink?: string; error?: string }
+    | null;
+  if (!response.ok) return { error: body?.error ?? `Invite failed (${response.status}).` };
+
+  return { ...(body?.status ? { status: body.status } : {}), ...(body?.inviteLink ? { inviteLink: body.inviteLink } : {}) };
 }

@@ -4,14 +4,22 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useUrlTransition } from "@/lib/core/useUrlTransition";
 import { SortableHeader, nextSortState, type SortDir } from "@/components/SortableHeader";
 import { PageSizeSelect } from "@/components/PageSizeSelect";
-import type { ClassOption, SectionOption, StudentSortKey } from "../types";
+import type { ClassOption, SectionOption, StudentFeeStatus, StudentSortKey } from "../types";
 
 const SEARCH_DEBOUNCE_MS = 300;
+
+const FEE_STATUS_OPTIONS: { value: StudentFeeStatus | ""; label: string }[] = [
+  { value: "", label: "Any fee status" },
+  { value: "due", label: "Has dues" },
+  { value: "paid", label: "Fully paid" },
+  { value: "none", label: "No invoices yet" },
+];
 
 export interface StudentDirectoryParams {
   search: string;
   classId: string;
   sectionId: string;
+  feeStatus: StudentFeeStatus | "";
   sort: StudentSortKey | "";
   dir: SortDir;
   pageSize: number;
@@ -54,6 +62,7 @@ export function StudentFilterBar({
       search: merged.search,
       classId: merged.classId,
       sectionId: merged.sectionId,
+      feeStatus: merged.feeStatus,
       sort: merged.sort,
       dir: merged.dir,
       pageSize: String(merged.pageSize),
@@ -128,6 +137,24 @@ export function StudentFilterBar({
             })}
           </select>
         </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="feeStatus" className="text-xs font-medium text-muted-foreground">
+            Fees
+          </label>
+          <select
+            id="feeStatus"
+            name="feeStatus"
+            value={params.feeStatus}
+            onChange={(e) => go({ feeStatus: e.target.value as StudentFeeStatus | "" })}
+            className="rounded-md border border-input bg-background px-3 py-2 text-base"
+          >
+            {FEE_STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
         {isPending ? <span className="pb-2 text-sm text-muted-foreground">Updating…</span> : null}
       </div>
 
@@ -141,6 +168,7 @@ export function StudentFilterBar({
                 <th className="px-3 py-2 font-medium">Class</th>
                 <th className="px-3 py-2 font-medium">Roll #</th>
                 <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Fees</th>
                 <th className="px-3 py-2 font-medium">
                   <span className="sr-only">Actions</span>
                 </th>

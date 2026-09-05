@@ -1,6 +1,10 @@
 import { requireSession } from "@/lib/core/auth/requireSession";
 import { RequirePermission } from "@/lib/core/auth/RequirePermission";
 import { getMasterDataOverview } from "@/lib/master-data/queries";
+import { getCustomFieldDefinitions } from "@/lib/core/customFields/queries";
+import { CustomFieldDefinitionsSection } from "@/lib/core/customFields/components/CustomFieldDefinitionsSection";
+import { getIdCardSettings } from "@/lib/idCards/queries";
+import { getSchoolBranding } from "@/lib/core/school/getSchoolBranding";
 import {
   createDepartmentAction,
   createDesignationAction,
@@ -19,11 +23,23 @@ import { SubjectsSection } from "@/lib/master-data/components/SubjectsSection";
 import { ClassSubjectMatrix } from "@/lib/master-data/components/ClassSubjectMatrix";
 import { NamedListSection } from "@/lib/master-data/components/NamedListSection";
 import { StudentCategoriesSection } from "@/lib/master-data/components/StudentCategoriesSection";
+import { HolidaysSection } from "@/lib/master-data/components/HolidaysSection";
+import { GradeBandsSection } from "@/lib/master-data/components/GradeBandsSection";
+import { AdmissionSettingsSection } from "@/lib/master-data/components/AdmissionSettingsSection";
+import { PeriodsSection } from "@/lib/master-data/components/PeriodsSection";
+import { HpcSettingsSection } from "@/lib/master-data/components/HpcSettingsSection";
+import { IdCardSettingsSection } from "@/lib/idCards/components/IdCardSettingsSection";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 export default async function MasterDataPage() {
   const session = await requireSession();
-  const overview = await getMasterDataOverview(session.schoolId!);
+  const [overview, idCardSettings, branding, studentCustomFields, staffCustomFields] = await Promise.all([
+    getMasterDataOverview(session.schoolId!),
+    getIdCardSettings(session.schoolId!),
+    getSchoolBranding(session.schoolId!),
+    getCustomFieldDefinitions(session.schoolId!, "student"),
+    getCustomFieldDefinitions(session.schoolId!, "staff"),
+  ]);
 
   return (
     <RequirePermission permission="school.manage_master_data">
@@ -75,6 +91,14 @@ export default async function MasterDataPage() {
           deleteAction={deleteHouseAction}
           placeholder="e.g. Ashoka"
         />
+        <HolidaysSection holidays={overview.holidays} />
+        <GradeBandsSection bands={overview.gradeBands} />
+        <AdmissionSettingsSection stages={overview.admissionStages} documentTypes={overview.admissionDocumentTypes} />
+        <PeriodsSection periods={overview.periods} />
+        <HpcSettingsSection criteria={overview.hpcCriteria} ratingScales={overview.hpcRatingScales} />
+        <CustomFieldDefinitionsSection entityType="student" title="Student Custom Fields" definitions={studentCustomFields} />
+        <CustomFieldDefinitionsSection entityType="staff" title="Staff Custom Fields" definitions={staffCustomFields} />
+        <IdCardSettingsSection settings={idCardSettings} schoolName={branding?.displayName ?? "School"} logoUrl={branding?.logoUrl ?? null} />
       </div>
     </RequirePermission>
   );
