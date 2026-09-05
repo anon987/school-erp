@@ -128,9 +128,9 @@ export function StudentFeesList({
                 Total ₹{(invoice.totalAmountPaise / 100).toLocaleString("en-IN")} · Paid ₹{(invoice.paidAmountPaise / 100).toLocaleString("en-IN")} · Due ₹
                 {(dueAmount / 100).toLocaleString("en-IN")}
               </div>
-              {canManage && dueAmount > 0 && invoice.status !== "cancelled" ? (
+              {dueAmount > 0 && invoice.status !== "cancelled" ? (
                 <div className="flex flex-wrap items-start gap-3">
-                  <RecordPaymentForm invoice={invoice} />
+                  {canManage ? <RecordPaymentForm invoice={invoice} /> : null}
                   <PayOnlineButton invoiceId={invoice.invoiceId} dueAmountPaise={dueAmount} schoolName={schoolName} />
                 </div>
               ) : null}

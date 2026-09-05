@@ -261,6 +261,21 @@ schoolerp/
 
 ---
 
+## Test / seed credentials (dev Supabase project only)
+
+For live-verifying features against the real dev Supabase project + running `apps/web`/`apps/worker` dev servers — never use these against a real school's data.
+
+| Role | Email | Password | Notes |
+|---|---|---|---|
+| School owner (seed) | `owner.a@seed.schoolerp.test` | `Seed-Test-Passw0rd!` | Pre-seeded, full permissions on the seed school. No `school_member` session cookie helper exists in the repo — mint one with a short script that signs in via `@supabase/ssr`'s `createServerClient` and prints the resulting cookie header (see any recent session transcript for the exact ~30-line script; it isn't checked into the repo). |
+| Teacher (test) | `test-teacher-verify@example.com` | `TestTeacher-Verify1!` | Created 2026-09-06 directly via the Admin API (`auth.admin.createUser` + `user_profile`/`school_member`/`school_member_role`/`staff` rows, service-role key, `apps/worker` only) — there is no "invite a new staff member" feature in the app yet (`/settings/members` only assigns roles to an *existing* `school_member`, it never creates one), so this mirrors `packages/db/supabase/seed.sql`'s own pattern rather than exercising an app feature. JWT carries `roles: ["teacher"]`; verified it can read students (broad-read) and cannot write the school profile (role-appropriate RLS). `staff.employee_code = 'TEST-TEACHER-01'`. |
+| Parent/guardian (test) | `test-parent-verify@example.com` | `TestParent-Verify1!` | Created 2026-09-06 through the real invite flow (`createGuardianPortalAccount` → `verifyOtp` → `/internal/portal/activate`), not a shortcut insert. `guardian_portal_account.status = 'active'`, linked to **two** students via `student_guardian` (see below). Useful for testing the parent portal (web `(portal)` route group and `apps/mobile`). |
+| Student (test) | *(no login — see note)* | — | `student.admission_number = 'TEST-STUDENT-01'`, enrolled in the current academic year, class 9 - A, linked to the test parent/guardian above. **There is no separate student login in this product** — `role.key = 'student'` exists as a reserved row for a future phase but is never assigned to anyone or checked by any permission/RLS/nav logic; a parent always signs in and acts on the student's behalf (documented product decision, see `[[project_p2_homework_complete]]`-style disclosures throughout P2). This student record exists so portal/mobile features that need a real enrolled student to test against (fees, results, timetable, homework) have one, not as a login. The seed school's original leftover test student (`RLS-STU-Amtmhs45c`, also linked to this same guardian) is still there too — both show up under "Your children" in the portal. |
+
+All four live only in the linked dev Supabase project (`cwpempevjabolnctrcxf`) — there is no separate local Supabase stack in this environment (no Docker available; `gen-types`/`db push` both target the linked remote project directly, see `packages/db/package.json`).
+
+---
+
 ## Definition of done
 
 A feature is not done until:

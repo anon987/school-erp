@@ -1,3 +1,6 @@
+import type { PeriodRow } from "@/lib/master-data/types";
+import type { TimetableSlotRow } from "@/lib/timetable/types";
+
 export interface LinkedStudentRow {
   id: string;
   admissionNumber: string;
@@ -5,6 +8,11 @@ export interface LinkedStudentRow {
   lastName: string;
   className: string | null;
   sectionName: string | null;
+}
+
+export interface PortalTimetable {
+  periods: PeriodRow[];
+  slots: TimetableSlotRow[];
 }
 
 export interface PortalExamRow {

@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { StatusBadge } from "@schoolerp/ui";
 import { requirePortalSession } from "@/lib/core/auth/portalSession";
-import { getLinkedStudents, getPortalExamsForStudent, getLeaveApplications } from "@/lib/portal/queries";
+import { getLinkedStudents, getPortalExamsForStudent, getLeaveApplications, getPortalTimetableForStudent } from "@/lib/portal/queries";
+import { PortalTimetableView } from "@/lib/portal/components/PortalTimetableView";
 import { getStudentAttendanceSummary } from "@/lib/attendance/queries";
 import { StudentFeesPanel } from "@/lib/fees/components/StudentFeesPanel";
 import { PortalHeader } from "@/lib/portal/components/PortalHeader";
@@ -36,11 +37,12 @@ export default async function PortalStudentPage({ params }: { params: Promise<{ 
   const student = linkedStudents.find((s) => s.id === studentId);
   if (!student) notFound();
 
-  const [attendance, exams, leaveApplications, homework] = await Promise.all([
+  const [attendance, exams, leaveApplications, homework, timetable] = await Promise.all([
     getStudentAttendanceSummary(session.schoolId, studentId),
     getPortalExamsForStudent(studentId),
     getLeaveApplications(studentId),
     getPortalHomework(studentId),
+    getPortalTimetableForStudent(session.schoolId, studentId),
   ]);
 
   return (
@@ -159,6 +161,15 @@ export default async function PortalStudentPage({ params }: { params: Promise<{ 
                     {leaveApplications.length === 0 ? <p className="text-sm text-muted-foreground">No leave requests yet.</p> : null}
                   </ul>
                 </div>
+              ),
+            },
+            {
+              id: "timetable",
+              label: "Timetable",
+              content: timetable ? (
+                <PortalTimetableView periods={timetable.periods} slots={timetable.slots} />
+              ) : (
+                <p className="text-sm text-muted-foreground">No timetable available -- not enrolled in the current academic year.</p>
               ),
             },
             {

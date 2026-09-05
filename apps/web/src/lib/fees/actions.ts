@@ -5,6 +5,7 @@ import type { Json } from "@schoolerp/types";
 import { createRazorpayProvider } from "@schoolerp/integrations";
 import { createSupabaseServerClient } from "@/lib/core/supabase/server";
 import { getSession } from "@/lib/core/auth/session";
+import { getPortalSession } from "@/lib/core/auth/portalSession";
 import { requirePermission } from "@/lib/core/auth/permissions";
 import { getCurrentAcademicYearId } from "@/lib/core/school/getCurrentAcademicYear";
 import { getRazorpayEnv } from "@/lib/core/payments/env";
@@ -464,14 +465,36 @@ export interface CreateRazorpayOrderState extends FeesFormState {
   paymentId?: string;
 }
 
+/**
+ * Reachable from two callers: a staff member collecting payment on the school's fee-collection
+ * screen (school.manage_fees), and now a parent paying online from the portal (§L) -- there is no
+ * school_member session to require a permission of in that case, so it falls back to
+ * getPortalSession(). Either way, `invoice_select`/`invoice_select_parent` RLS already scopes
+ * which invoice row this caller can even see -- the `!invoiceRow` check below is real
+ * authorization (a guardian querying a different family's invoice id gets nothing back), not just
+ * a not-found guard. The actual `payment` insert is likewise authorized by a matching pair of RLS
+ * policies (`payment_insert` for staff, `payment_insert_parent` for guardians -- the latter
+ * additionally scoped to method='online'/status='pending_gateway' only, see the migration).
+ */
 export async function createRazorpayOrderAction(invoiceId: string, dueAmountPaise: number): Promise<CreateRazorpayOrderState> {
-  await requirePermission(PERMISSION);
-  const session = await getSession();
-  if (!session?.schoolId) return { error: "No school in session." };
+  const staffSession = await getSession();
+  let schoolId: string;
+  let receivedByAuthUserId: string;
+
+  if (staffSession?.schoolId) {
+    await requirePermission(PERMISSION);
+    schoolId = staffSession.schoolId;
+    receivedByAuthUserId = staffSession.authUserId;
+  } else {
+    const portalSession = await getPortalSession();
+    if (!portalSession) return { error: "Not signed in." };
+    schoolId = portalSession.schoolId;
+    receivedByAuthUserId = portalSession.authUserId;
+  }
   if (dueAmountPaise <= 0) return { error: "Nothing due on this invoice." };
 
   const supabase = await createSupabaseServerClient();
-  const { data: invoiceRow } = await supabase.from("invoice").select("student_id").eq("id", invoiceId).eq("school_id", session.schoolId).maybeSingle();
+  const { data: invoiceRow } = await supabase.from("invoice").select("student_id").eq("id", invoiceId).eq("school_id", schoolId).maybeSingle();
   if (!invoiceRow) return { error: "Invoice not found." };
   const studentId = (invoiceRow as unknown as { student_id: string }).student_id;
 
@@ -482,7 +505,7 @@ export async function createRazorpayOrderAction(invoiceId: string, dueAmountPais
     return { error: "Online payment isn't configured for this school yet." };
   }
 
-  const receiptNumberRes = await supabase.rpc("fn_next_school_number", { p_school_id: session.schoolId, p_sequence_key: "fee_receipt" });
+  const receiptNumberRes = await supabase.rpc("fn_next_school_number", { p_school_id: schoolId, p_sequence_key: "fee_receipt" });
   if (receiptNumberRes.error) return { error: receiptNumberRes.error.message };
   const receiptNumber = receiptNumberRes.data as unknown as string;
 
@@ -500,7 +523,7 @@ export async function createRazorpayOrderAction(invoiceId: string, dueAmountPais
   const { data: paymentRow, error: paymentError } = await supabase
     .from("payment")
     .insert({
-      school_id: session.schoolId,
+      school_id: schoolId,
       invoice_id: invoiceId,
       student_id: studentId,
       amount_paise: dueAmountPaise,
@@ -508,7 +531,7 @@ export async function createRazorpayOrderAction(invoiceId: string, dueAmountPais
       status: "pending_gateway",
       razorpay_order_id: order.orderId,
       receipt_number: receiptNumber,
-      received_by_auth_user_id: session.authUserId,
+      received_by_auth_user_id: receivedByAuthUserId,
     })
     .select("id")
     .single();

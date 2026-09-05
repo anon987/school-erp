@@ -26,6 +26,19 @@ const toNamedRows = (data: { id: string; name: string }[] | null): NamedRow[] =>
  * a clerk moves through top to bottom in one sitting, not a paginated directory, so there's no
  * reason to shape this as N separate page loads the way Students/Staff directories are.
  */
+/** Narrower than getMasterDataOverview -- for call sites (Portal's timetable tab) that only need
+ *  the bell schedule, not the whole settings-page payload. Portal is parents on low-end phones
+ *  over patchy 4G (CLAUDE.md perf expectations); fetching classes/subjects/departments/etc. just
+ *  to read `.periods` off the result would be wasteful there. */
+export async function getPeriods(schoolId: string): Promise<PeriodRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("period").select("id, period_number, label, start_time, end_time, is_break").eq("school_id", schoolId).order("period_number");
+  if (error) throw error;
+  return ((data ?? []) as unknown as { id: string; period_number: number; label: string; start_time: string; end_time: string; is_break: boolean }[]).map(
+    (p) => ({ id: p.id, periodNumber: p.period_number, label: p.label, startTime: p.start_time.slice(0, 5), endTime: p.end_time.slice(0, 5), isBreak: p.is_break }) satisfies PeriodRow,
+  );
+}
+
 export async function getMasterDataOverview(schoolId: string): Promise<MasterDataOverview> {
   const supabase = await createSupabaseServerClient();
 

@@ -1,6 +1,8 @@
 import { createSupabaseServerClient } from "@/lib/core/supabase/server";
 import { getCurrentAcademicYearId } from "@/lib/core/school/getCurrentAcademicYear";
-import type { GuardianProfile, LeaveApplicationRow, LeaveApplicationStatus, LinkedStudentRow, PortalExamRow } from "./types";
+import { getPeriods } from "@/lib/master-data/queries";
+import { getTimetableGrid } from "@/lib/timetable/queries";
+import type { GuardianProfile, LeaveApplicationRow, LeaveApplicationStatus, LinkedStudentRow, PortalExamRow, PortalTimetable } from "./types";
 
 /**
  * Two queries, not one embedded one: filtering an EMBEDDED resource (student.enrollment) by
@@ -75,6 +77,35 @@ export async function getPortalExamsForStudent(studentId: string): Promise<Porta
     if (!seen.has(exam.id)) seen.set(exam.id, { id: exam.id, name: exam.name, term: exam.term, classId: examSubject.class_id });
   }
   return Array.from(seen.values());
+}
+
+/**
+ * §L (docs/schoolerp_features.md) lists "Timetable" as parent-portal scope; the RLS policies for
+ * portal read on timetable_slot/period were already in place (added alongside the Timetable
+ * module itself, via fn_is_portal_member_of_school) but nothing on the portal side ever queried
+ * or rendered them until now. Reuses getTimetableGrid (Timetable module, staff-facing) as-is --
+ * it's a plain broad-read query with no staff-ownership filter, so it's safe to call for a
+ * parent's own child's class/section. Returns null when the student has no current-year
+ * enrollment (nothing to show).
+ */
+export async function getPortalTimetableForStudent(schoolId: string, studentId: string): Promise<PortalTimetable | null> {
+  const supabase = await createSupabaseServerClient();
+  const currentYearId = await getCurrentAcademicYearId(schoolId);
+  if (!currentYearId) return null;
+
+  const { data: enrollmentRow, error } = await supabase
+    .from("enrollment")
+    .select("class_id, section_id")
+    .eq("school_id", schoolId)
+    .eq("student_id", studentId)
+    .eq("academic_year_id", currentYearId)
+    .maybeSingle();
+  if (error) throw error;
+  const enrollment = enrollmentRow as unknown as { class_id: string; section_id: string } | null;
+  if (!enrollment) return null;
+
+  const [periods, slots] = await Promise.all([getPeriods(schoolId), getTimetableGrid(schoolId, enrollment.class_id, enrollment.section_id)]);
+  return { periods, slots };
 }
 
 export async function getLeaveApplications(studentId: string): Promise<LeaveApplicationRow[]> {
